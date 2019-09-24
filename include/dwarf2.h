@@ -4,10 +4,13 @@
 #include <stdint.h>
 
 #include "obj.h"
+#include "vector.h"
+
+#define DWARF2_CUH_SIZE 11
 
 
 struct dwarf2_cuh {
-    uint32_t contrib_len;
+    uint32_t cuh_len;
     uint16_t ver;
     uint32_t abbrev_off;
     uint8_t word_sz;
@@ -15,8 +18,19 @@ struct dwarf2_cuh {
     uintmax_t uleb;
 };
 
+struct dwarf2_abbrevtbl {
+    size_t id;
+    uintmax_t tag;
+    uint8_t child;
+    uint32_t abbrev_len;
+};
 
-struct dwarf2_cuh dwarf2_cuh_decode(struct sect *dinfo);
+
+vector_of(struct dwarf2_cuh) dwarf2_cuhs_decode(struct sect *dinfo);
+
+vector_of(struct dwarf2_abbrevtbl) dwarf2_abbrevtbls_decode(struct sect *dabbrev);
+
+const char *dwarf2_tag_lookup(uintmax_t tag);
 
 
 #endif /* _DWARF2_H_ */

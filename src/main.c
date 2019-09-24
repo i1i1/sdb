@@ -17,8 +17,6 @@
 #include "macro.h"
 #include "obj.h"
 #include "dwarf2.h"
-
-#define VECTOR_IMPLEMENTATION
 #include "vector.h"
 
 
@@ -89,15 +87,23 @@ load_debug_info(const char *fn)
     printf("dabbrev_len = 0x%lx\n", dabbrev.size);
     printf("\n");
 
-    struct dwarf2_cuh cuh = dwarf2_cuh_decode(&dinfo);
+    vector_of(struct dwarf2_cuh)       cuhs  = dwarf2_cuhs_decode(&dinfo);
+    vector_of(struct dwarf2_abbrevtbl) atbls = dwarf2_abbrevtbls_decode(&dabbrev);
 
-    if (cuh.ver != 2)
-        error("Not a dwarf2 format. Instead dwarf%d\n", cuh.ver);
+    if (cuhs[0].ver != 2)
+        error("Not a dwarf2 format. Instead dwarf%d\n", cuhs[0].ver);
 
-    printf("Compilation unit\n");
-    printf("contrib_len = 0x%x\n", cuh.contrib_len);
-    printf("abbrev_off  = 0x%x\n", cuh.abbrev_off);
-    printf("uleb        = 0x%lx\n", cuh.uleb);
+    printf("Compilation unit [0]\n");
+    printf("cuh_len    = 0x%x\n",  cuhs[0].cuh_len);
+    printf("abbrev_off = 0x%x\n",  cuhs[0].abbrev_off);
+    printf("uleb       = 0x%lx\n", cuhs[0].uleb);
+    printf("\n");
+
+    printf("Abbrev table [0]\n");
+    printf("tbl_len = 0x%x\n",   atbls[0].abbrev_len);
+    printf("id      = 0x%lx\n",  atbls[0].id);
+    printf("tag     = `%s'\n",   dwarf2_tag_lookup(atbls[0].tag));
+    printf("child   = 0x%x\n",   atbls[0].child);
     printf("\n");
 
     printf("File size = %ld\n", o->sz);

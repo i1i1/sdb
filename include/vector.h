@@ -46,7 +46,7 @@ struct vector {
  */
 #define vector_of(elem) elem *
 
-#define vector_decl(elem, nm)   vector_of(elem) nm = NULL;
+#define vector_decl(elem, nm)   vector_of(elem) nm = NULL
 
 #define vector_nmemb(a)         ((*(a)) ? (_vector_assert_canaries(*(a)), \
                                            _vector_get_nmemb(*(a))) : 0)

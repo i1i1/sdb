@@ -1,11 +1,24 @@
+#include <stdlib.h>
 #include <stdint.h>
 
 #include "utils.h"
 #include "macro.h"
 
+#define VECTOR_IMPLEMENTATION
+#include "vector.h"
+
+
+size_t
+leb_len(uint8_t *buf)
+{
+    size_t ret = 1;
+    while ((*buf++) & 0x80)
+        ret++;
+    return ret;
+}
 
 uintmax_t
-uleb_extract(uint8_t *buf)
+uleb_decode(uint8_t *buf)
 {
     uintmax_t res = 0;
     int shift = 0;
@@ -26,7 +39,7 @@ uleb_extract(uint8_t *buf)
 }
 
 intmax_t
-sleb_extract(uint8_t *buf)
+sleb_decode(uint8_t *buf)
 {
     intmax_t res = 0;
     int shift = 0;

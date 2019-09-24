@@ -3,9 +3,10 @@
 
 #include <stdint.h>
 
+uintmax_t uleb_decode(uint8_t *buf);
 
-uintmax_t uleb_extract(uint8_t *buf);
+intmax_t  sleb_decode(uint8_t *buf);
 
-intmax_t  sleb_extract(uint8_t *buf);
+size_t    leb_len(uint8_t *buf);
 
 #endif /* _UTILS_H_ */
