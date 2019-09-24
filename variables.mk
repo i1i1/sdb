@@ -1,5 +1,5 @@
 CC := gcc
-CFLAGS := -Wall -Wextra -gdwarf-2 -Iinclude -O3
+CFLAGS := -Wall -Wextra -gdwarf-2 -gstrict-dwarf -Iinclude -O100500
 
 SRC := $(shell find src -name "*.c")
 HDR := $(shell find include -name "*.h")

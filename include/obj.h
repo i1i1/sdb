@@ -13,7 +13,7 @@ struct obj {
 
 struct sect {
     char *name;
-    uint8_t *addr;
+    uint8_t *buf;
     size_t size;
 };
 

@@ -24,6 +24,10 @@
 #define _STRINGIFY(a) #a
 #define STRINGIFY(a) _STRINGIFY(a)
 
+#define error(args...) do { fprintf(stderr, args); exit(1); } while(0)
+
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #endif /* _MACRO_H_ */

@@ -16,11 +16,10 @@
 
 #include "macro.h"
 #include "obj.h"
+#include "dwarf2.h"
 
 #define VECTOR_IMPLEMENTATION
 #include "vector.h"
-
-#define error(args...) do { fprintf(stderr, args); exit(1); } while(0)
 
 
 int target_pid = -1;
@@ -73,35 +72,37 @@ void
 load_debug_info(const char *fn)
 {
     struct obj *o;
-    struct sect dloc, dinfo;
-    struct sect *stabs = NULL;
+    struct sect dinfo, dabbrev;
 
     if ((o = obj_init(fn)) == NULL)
         error("Not an object\n");
 
-    for (int i = 0; i < (int)obj_get_sect_num(o); i++) {
-        struct sect s = obj_get_sect(o, i);
-        char *sec_name = s.name;
+    dinfo    = obj_get_sect_by_name(o, ".debug_info");
+    dabbrev  = obj_get_sect_by_name(o, ".debug_abbrev");
 
-        if (STREQ(sec_name, ".debug_loc"))
-            dloc = s;
-        else if (STREQ(sec_name, ".debug_info"))
-            dinfo = s;
-        /* if starts with .debug */
-        else if (strncmp(sec_name, ".debug", sizeof(".debug")-1) == 0)
-            vector_push(&stabs, s);
-    }
+    if (dinfo.name == NULL)
+        error("No `.debug_info' section\n");
+    if (dabbrev.name == NULL)
+        error("No `.debug_abbrev' section\n");
 
-    printf("debug sections num %ld\n", vector_nmemb(&stabs));
-
-    for (int i = 0; i < (int)vector_nmemb(&stabs); i++)
-        printf("Section `%s' of %ld bytes\n", stabs[i].name, stabs[i].size);
-
+    printf("dinfo_len   = 0x%lx\n", dinfo.size);
+    printf("dabbrev_len = 0x%lx\n", dabbrev.size);
     printf("\n");
+
+    struct dwarf2_cuh cuh = dwarf2_cuh_decode(&dinfo);
+
+    if (cuh.ver != 2)
+        error("Not a dwarf2 format. Instead dwarf%d\n", cuh.ver);
+
+    printf("Compilation unit\n");
+    printf("contrib_len = 0x%x\n", cuh.contrib_len);
+    printf("abbrev_off  = 0x%x\n", cuh.abbrev_off);
+    printf("uleb        = 0x%lx\n", cuh.uleb);
+    printf("\n");
+
     printf("File size = %ld\n", o->sz);
 
     obj_deinit(o);
-    vector_free(&stabs);
 }
 
 int

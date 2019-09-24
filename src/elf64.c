@@ -51,7 +51,7 @@ elf64_get_sect(const struct obj *o, size_t n)
 
     return (struct sect) {
         .name = elf64_getstr(o, sh[n].sh_name),
-        .addr = o->fb + sh[n].sh_addr,
+        .buf  = o->fb + sh[n].sh_offset,
         .size = sh[n].sh_size,
     };
 }
