@@ -62,6 +62,118 @@ DW_TAG(volatile_type,          0x35)
 DW_TAG(lo_user,                0x4080)
 DW_TAG(hi_user,                0xffff)
 };
+#undef DW_TAG
+
+#define DW_AT(str_, attr_, class_) \
+    {                              \
+        .attr = attr_,             \
+        .str = STRINGIFY(str_),    \
+        .class = class_            \
+    },
+static struct {
+    uintmax_t attr;
+    char *str;
+    char *class;
+} attribs[] = {
+    DW_AT(sibling,                0x01, "reference")
+    DW_AT(location,               0x02, "block, constant")
+    DW_AT(name,                   0x03, "string")
+    DW_AT(ordering,               0x09, "constant")
+    DW_AT(byte_size,              0x0b, "constant")
+    DW_AT(bit_offset,             0x0c, "constant")
+    DW_AT(bit_size,               0x0d, "constant")
+    DW_AT(stmt_list,              0x10, "constant")
+    DW_AT(low_pc,                 0x11, "address")
+    DW_AT(high_pc,                0x12, "address")
+    DW_AT(language,               0x13, "constant")
+    DW_AT(discr,                  0x15, "reference")
+    DW_AT(discr_value,            0x16, "constant")
+    DW_AT(visibility,             0x17, "constant")
+    DW_AT(import,                 0x18, "reference")
+    DW_AT(string_length,          0x19, "block, constant")
+    DW_AT(common_reference,       0x1a, "reference")
+    DW_AT(comp_dir,               0x1b, "string")
+    DW_AT(const_value,            0x1c, "string, constant, block")
+    DW_AT(containing_type,        0x1d, "reference")
+    DW_AT(default_value,          0x1e, "reference")
+    DW_AT(inline,                 0x20, "constant")
+    DW_AT(is_optional,            0x21, "flag")
+    DW_AT(lower_bound,            0x22, "constant, reference")
+    DW_AT(producer,               0x25, "string")
+    DW_AT(prototyped,             0x27, "flag")
+    DW_AT(return_addr,            0x2a, "block, constant")
+    DW_AT(start_scope,            0x2c, "constant")
+    DW_AT(stride_size,            0x2e, "constant")
+    DW_AT(upper_bound,            0x2f, "constant, reference")
+    DW_AT(abstract_origin,        0x31, "reference")
+    DW_AT(accessibility,          0x32, "constant")
+    DW_AT(address_class,          0x33, "constant")
+    DW_AT(artificial,             0x34, "flag")
+    DW_AT(base_types,             0x35, "reference")
+    DW_AT(calling_convention,     0x36, "constant")
+    DW_AT(count,                  0x37, "constant, reference")
+    DW_AT(data_member_location,   0x38, "block, reference")
+    DW_AT(decl_column,            0x39, "constant")
+    DW_AT(decl_file,              0x3a, "constant")
+    DW_AT(decl_line,              0x3b, "constant")
+    DW_AT(declaration,            0x3c, "flag")
+    DW_AT(discr_list,             0x3d, "block")
+    DW_AT(encoding,               0x3e, "constant")
+    DW_AT(external,               0x3f, "flag")
+    DW_AT(frame_base,             0x40, "block, constant")
+    DW_AT(friend,                 0x41, "reference")
+    DW_AT(identifier_case,        0x42, "constant")
+    DW_AT(macro_info,             0x43, "constant")
+    DW_AT(namelist_item,          0x44, "block")
+    DW_AT(priority,               0x45, "reference")
+    DW_AT(segment,                0x46, "block, constant")
+    DW_AT(specification,          0x47, "reference")
+    DW_AT(static_link,            0x48, "block, constant")
+    DW_AT(type,                   0x49, "reference")
+    DW_AT(use_location,           0x4a, "block, constant")
+    DW_AT(variable_parameter,     0x4b, "flag")
+    DW_AT(virtuality,             0x4c, "constant")
+    DW_AT(vtable_elem_location,   0x4d, "block, reference")
+    DW_AT(lo_user,                0x2000, "—")
+    DW_AT(hi_user,                0x3fff, "_" )
+};
+#undef DW_AT
+
+#define DW_FORM(str_, form_, class_) \
+    {                                \
+        .form = form_,               \
+        .str = STRINGIFY(str_),      \
+        .class = class_              \
+    },
+struct {
+    char *str;
+    uintmax_t form;
+    char *class;
+} forms[] = {
+    DW_FORM(addr,        0x01, "address")
+    DW_FORM(block2,      0x03, "block")
+    DW_FORM(block4,      0x04, "block")
+    DW_FORM(data2,       0x05, "constant")
+    DW_FORM(data4,       0x06, "constant")
+    DW_FORM(data8,       0x07, "constant")
+    DW_FORM(string,      0x08, "string")
+    DW_FORM(block,       0x09, "block")
+    DW_FORM(block1,      0x0a, "block")
+    DW_FORM(data1,       0x0b, "constant")
+    DW_FORM(flag,        0x0c, "flag")
+    DW_FORM(sdata,       0x0d, "constant")
+    DW_FORM(strp,        0x0e, "string")
+    DW_FORM(udata,       0x0f, "constant")
+    DW_FORM(ref_addr,    0x10, "reference")
+    DW_FORM(ref1,        0x11, "reference")
+    DW_FORM(ref2,        0x12, "reference")
+    DW_FORM(ref4,        0x13, "reference")
+    DW_FORM(ref8,        0x14, "reference")
+    DW_FORM(ref_udata,   0x15, "reference")
+    DW_FORM(indirect,    0x16, "(see section 7.5.3)")
+};
+#undef DW_FORM
+
 
 const char *
 dwarf2_tag_lookup(uintmax_t tag)
@@ -73,17 +185,86 @@ dwarf2_tag_lookup(uintmax_t tag)
     return NULL;
 }
 
+const char *
+dwarf2_attrib_lookup(uintmax_t nm)
+{
+    for (unsigned i = 0; i < ARRAY_SIZE(attribs); i++) {
+        if (attribs[i].attr == nm)
+            return attribs[i].str;
+    }
+    return NULL;
+}
+
+const char *
+dwarf2_attrib_lookup_class(uintmax_t nm)
+{
+    for (unsigned i = 0; i < ARRAY_SIZE(attribs); i++) {
+        if (attribs[i].attr == nm)
+            return attribs[i].class;
+    }
+    return NULL;
+}
+
+const char *
+dwarf2_form_lookup(uintmax_t nm)
+{
+    for (unsigned i = 0; i < ARRAY_SIZE(forms); i++) {
+        if (forms[i].form == nm)
+            return forms[i].str;
+    }
+    return NULL;
+}
+
+const char *
+dwarf2_form_lookup_class(uintmax_t nm)
+{
+    for (unsigned i = 0; i < ARRAY_SIZE(forms); i++) {
+        if (forms[i].form == nm)
+            return forms[i].class;
+    }
+    return NULL;
+}
+
+static vector_of(struct dwarf2_attr)
+    dwarf2_attrs_decode(uint8_t *buf, size_t *attrs_len)
+{
+    vector_decl(struct dwarf2_attr, attrs);
+    struct dwarf2_attr v;
+    size_t len = 0;
+
+    do {
+        v.name = uleb_decode(buf);
+        len += leb_len(buf);
+        buf += leb_len(buf);
+        v.form = uleb_decode(buf);
+        len += leb_len(buf);
+        buf += leb_len(buf);
+
+        vector_push(&attrs, v);
+    } while (v.name != 0 && v.form != 0);
+
+    vector_pop(&attrs);
+
+    *attrs_len = len;
+    return attrs;
+}
+
 static struct dwarf2_abbrevtbl
 dwarf2_abbrevtbl_decode(uint8_t *buf)
 {
+    size_t attrs_len;
     size_t id_len  = leb_len(buf);
     size_t tag_len = leb_len(buf+id_len);
+    vector_of(struct dwarf2_attr) attrs =
+        dwarf2_attrs_decode(buf + id_len + tag_len + 1, &attrs_len);
 
     return (struct dwarf2_abbrevtbl) {
         .id         = uleb_decode(buf),
         .tag        = uleb_decode(buf+id_len),
         .child      = buf[id_len+tag_len],
-        .abbrev_len = id_len + tag_len + 1,
+        /* 1 is length of field child */
+        .abbrev_len = id_len + tag_len + 1 + attrs_len,
+        .attrs      = attrs,
     };
 }
 

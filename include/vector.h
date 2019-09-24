@@ -65,6 +65,15 @@ struct vector {
                                  : (_vector_init(a) ? 1                         \
                                     : (_vector_push(*(a), val), 0)))
 
+#ifndef __GNUC__
+#define typeof(var)
+#endif
+
+#define vector_foreach(v_, vec_)                        \
+    for(size_t _tmp = 1, _i = 0;                        \
+        _tmp && _i < vector_nmemb(vec_);                \
+        _tmp = !_tmp, _i++)                             \
+        for(typeof(**vec_) v_ = (*vec_)[_i]; _tmp; _tmp = !_tmp)
 
 int __vector_grow(void **pp, int sz);
 

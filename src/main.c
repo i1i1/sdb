@@ -99,16 +99,23 @@ load_debug_info(const char *fn)
     printf("uleb       = 0x%lx\n", cuhs[0].uleb);
     printf("\n");
 
-    printf("Abbrev table [0]\n");
-    printf("tbl_len = 0x%x\n",   atbls[0].abbrev_len);
-    printf("id      = 0x%lx\n",  atbls[0].id);
-    printf("tag     = `%s'\n",   dwarf2_tag_lookup(atbls[0].tag));
-    printf("child   = 0x%x\n",   atbls[0].child);
-    printf("\n");
+    vector_foreach(abbrev, &atbls) {
+        printf("   %ld      DW_TAG_%s    [%s children]\n",
+               abbrev.id, dwarf2_tag_lookup(abbrev.tag),
+               abbrev.child ? "has" : "no"
+            );
+
+        vector_foreach(a, &abbrev.attrs) {
+            printf("    DW_AT_%-6s\tDW_FORM_%s\n",
+                   dwarf2_attrib_lookup(a.name),
+                   dwarf2_form_lookup(a.form));
+        }
+    }
 
     printf("File size = %ld\n", o->sz);
-
     obj_deinit(o);
+    vector_free(&atbls);
+    vector_free(&cuhs);
 }
 
 int
