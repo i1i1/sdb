@@ -93,11 +93,14 @@ load_debug_info(const char *fn)
     if (cuhs[0].ver != 2)
         error("Not a dwarf2 format. Instead dwarf%d\n", cuhs[0].ver);
 
-    printf("Compilation unit [0]\n");
-    printf("cuh_len    = 0x%x\n",  cuhs[0].cuh_len);
-    printf("abbrev_off = 0x%x\n",  cuhs[0].abbrev_off);
-    printf("uleb       = 0x%lx\n", cuhs[0].uleb);
-    printf("\n");
+    for (unsigned i = 0; i < vector_nmemb(&cuhs); i++) {
+        printf("Compilation unit [%u]\n", i);
+        printf("cuh_len    = 0x%x\n",  cuhs[i].cuh_len);
+        printf("abbrev_off = 0x%x\n",  cuhs[i].abbrev_off);
+        for (unsigned j = 0; j < vector_nmemb(&(cuhs[i].dies)); j++)
+            printf("die[%4u]  = 0x%lx\n", j, cuhs[i].dies[j]);
+        printf("\n");
+    }
 
     vector_foreach(abbrev, &atbls) {
         printf("   %ld      DW_TAG_%s    [%s children]\n",

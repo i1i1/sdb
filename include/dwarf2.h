@@ -9,18 +9,22 @@
 #define DWARF2_CUH_SIZE 11
 
 
+struct dwarf2_attr {
+    uintmax_t name;
+    uintmax_t form;
+};
+
+struct dwarf2_die {
+    uintmax_t abbrev_idx;
+    vector_of(struct dwarf2_attr) attrs;
+};
+
 struct dwarf2_cuh {
     uint32_t cuh_len;
     uint16_t ver;
     uint32_t abbrev_off;
     uint8_t word_sz;
-    uint8_t *die;
-    uintmax_t uleb;
-};
-
-struct dwarf2_attr {
-    uintmax_t name;
-    uintmax_t form;
+    vector_of(struct dwarf2_die) dies;
 };
 
 struct dwarf2_abbrevtbl {

@@ -286,16 +286,39 @@ dwarf2_abbrevtbls_decode(struct sect *dabbrev)
     return ret;
 }
 
+static vector_of(struct dwarf2_die)
+dwarf2_dies_decode(uint8_t *buf, size_t bufsz)
+{
+    vector_decl(struct dwarf2_die, dies);
+    int sz = bufsz;
+
+    while (sz > 0) {
+        size_t attrs_len, len = leb_len(buf);
+        struct dwarf2_die v = {
+            .abbrev_idx = uleb_decode(buf),
+            .attrs      = dwarf2_attrs_decode(buf+len, &attrs_len)
+        };
+
+        vector_push(&dies, v);
+        buf += (len + attrs_len);
+        sz  -= (len + attrs_len);
+    }
+
+    printf("sz = %d\n", sz);
+
+    return dies;
+}
+
 static struct dwarf2_cuh
 dwarf2_cuh_decode(uint8_t *buf)
 {
     return (struct dwarf2_cuh) {
-        .cuh_len    = *(uint32_t *)(buf + 0) + 4, /* 4 is sizeof this field itself  */
+        .cuh_len    = *(uint32_t *)buf + 4, /* 4 is sizeof this field itself  */
         .ver        = *(uint16_t *)(buf + 4),
         .abbrev_off = *(uint32_t *)(buf + 6),
         .word_sz    = *(uint8_t  *)(buf + 10),
-        .die        = buf + 4,
-        .uleb       = uleb_decode(buf + DWARF2_CUH_SIZE),
+        .dies       = dwarf2_dies_decode(buf + DWARF2_CUH_SIZE,
+                                         *(uint32_t *)buf + 4 - DWARF2_CUH_SIZE),
     };
 }
 
