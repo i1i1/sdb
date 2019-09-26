@@ -19,12 +19,12 @@ struct dwarf2_die {
     vector_of(struct dwarf2_attr) attrs;
 };
 
-struct dwarf2_cuh {
-    uint32_t cuh_len;
+struct dwarf2_cu {
+    uint32_t cu_len;
     uint16_t ver;
     uint32_t abbrev_off;
     uint8_t word_sz;
-    vector_of(struct dwarf2_die) dies;
+    uint8_t *dies;
 };
 
 struct dwarf2_abbrevtbl {
@@ -35,15 +35,27 @@ struct dwarf2_abbrevtbl {
     vector_of(struct dwarf2_attr) attrs;
 };
 
+enum dwarf2_class {
+    dwarf2_class_ref   = 1 << 0,
+    dwarf2_class_block = 1 << 1,
+    dwarf2_class_const = 1 << 2,
+    dwarf2_class_str   = 1 << 3,
+    dwarf2_class_addr  = 1 << 4,
+    dwarf2_class_flag  = 1 << 5,
+};
 
-vector_of(struct dwarf2_cuh) dwarf2_cuhs_decode(struct sect *dinfo);
+
+struct dwarf2_cu dwarf2_cu_decode(uint8_t *buf);
+struct dwarf2_abbrevtbl dwarf2_abbrevtbl_decode(uint8_t *buf);
+
+vector_of(struct dwarf2_cu) dwarf2_cus_decode(struct sect *dinfo);
 vector_of(struct dwarf2_abbrevtbl) dwarf2_abbrevtbls_decode(struct sect *dabbrev);
 
 const char *dwarf2_tag_lookup(uintmax_t tag);
 const char *dwarf2_attrib_lookup(uintmax_t nm);
-const char *dwarf2_attrib_lookup_class(uintmax_t nm);
 const char *dwarf2_form_lookup(uintmax_t nm);
-const char *dwarf2_form_lookup_class(uintmax_t nm);
+
+const char *dwarf2_describe_attrib(uint8_t *die, struct dwarf2_attr attr, uint8_t *dstr, size_t *len);
 
 #endif /* _DWARF2_H_ */
 

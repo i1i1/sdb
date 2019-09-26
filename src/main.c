@@ -15,6 +15,7 @@
 #include <sys/wait.h>
 
 #include "macro.h"
+#include "utils.h"
 #include "obj.h"
 #include "dwarf2.h"
 #include "vector.h"
@@ -70,55 +71,61 @@ void
 load_debug_info(const char *fn)
 {
     struct obj *o;
-    struct sect dinfo, dabbrev;
+    struct sect dinfo, dabbrev, dstr;
 
     if ((o = obj_init(fn)) == NULL)
         error("Not an object\n");
 
-    dinfo    = obj_get_sect_by_name(o, ".debug_info");
-    dabbrev  = obj_get_sect_by_name(o, ".debug_abbrev");
+    dinfo   = obj_get_sect_by_name(o, ".debug_info");
+    dabbrev = obj_get_sect_by_name(o, ".debug_abbrev");
+    dstr    = obj_get_sect_by_name(o, ".debug_str");
 
     if (dinfo.name == NULL)
         error("No `.debug_info' section\n");
     if (dabbrev.name == NULL)
         error("No `.debug_abbrev' section\n");
+    if (dstr.name == NULL)
+        error("No `.debug_str' section\n");
 
     printf("dinfo_len   = 0x%lx\n", dinfo.size);
     printf("dabbrev_len = 0x%lx\n", dabbrev.size);
+    printf("dstr_len    = 0x%lx\n", dstr.size);
     printf("\n");
 
-    vector_of(struct dwarf2_cuh)       cuhs  = dwarf2_cuhs_decode(&dinfo);
-    vector_of(struct dwarf2_abbrevtbl) atbls = dwarf2_abbrevtbls_decode(&dabbrev);
+    vector_of(struct dwarf2_cu) cus = dwarf2_cus_decode(&dinfo);
 
-    if (cuhs[0].ver != 2)
-        error("Not a dwarf2 format. Instead dwarf%d\n", cuhs[0].ver);
+    if (cus[0].ver != 2)
+        error("Not a dwarf2 format. Instead dwarf%d\n", cus[0].ver);
 
-    for (unsigned i = 0; i < vector_nmemb(&cuhs); i++) {
+    for (unsigned i = 0; i < vector_nmemb(&cus); i++) {
+        struct dwarf2_abbrevtbl abbrev = dwarf2_abbrevtbl_decode(dabbrev.buf + cus[i].abbrev_off);
+
         printf("Compilation unit [%u]\n", i);
-        printf("cuh_len    = 0x%x\n",  cuhs[i].cuh_len);
-        printf("abbrev_off = 0x%x\n",  cuhs[i].abbrev_off);
-        for (unsigned j = 0; j < vector_nmemb(&(cuhs[i].dies)); j++)
-            printf("die[%4u]  = 0x%lx\n", j, cuhs[i].dies[j]);
+        printf("cuh_len    = 0x%x\n",  cus[i].cu_len);
+        printf("abbrev_off = 0x%x\n",  cus[i].abbrev_off);
         printf("\n");
-    }
 
-    vector_foreach(abbrev, &atbls) {
         printf("   %ld      DW_TAG_%s    [%s children]\n",
                abbrev.id, dwarf2_tag_lookup(abbrev.tag),
                abbrev.child ? "has" : "no"
             );
 
+        uint8_t *die = cus[i].dies + leb_len(cus[i].dies);
+
         vector_foreach(a, &abbrev.attrs) {
-            printf("    DW_AT_%-6s\tDW_FORM_%s\n",
+            size_t len;
+
+            printf("    DW_AT_%-8s\tDW_FORM_%s\t%s\n",
                    dwarf2_attrib_lookup(a.name),
-                   dwarf2_form_lookup(a.form));
+                   dwarf2_form_lookup(a.form),
+                   dwarf2_describe_attrib(die, a, dstr.buf, &len));
+            die += len;
         }
     }
 
     printf("File size = %ld\n", o->sz);
     obj_deinit(o);
-    vector_free(&atbls);
-    vector_free(&cuhs);
+    vector_free(&cus);
 }
 
 int
