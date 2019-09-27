@@ -21,17 +21,17 @@ struct dwarf2_die {
 
 struct dwarf2_cu {
     uint32_t cu_len;
+    uint32_t dies_len;
     uint16_t ver;
     uint32_t abbrev_off;
     uint8_t word_sz;
     uint8_t *dies;
 };
 
-struct dwarf2_abbrevtbl {
+struct dwarf2_abbrev {
     size_t id;
     uintmax_t tag;
     uint8_t child;
-    uint32_t abbrev_len;
     vector_of(struct dwarf2_attr) attrs;
 };
 
@@ -44,12 +44,13 @@ enum dwarf2_class {
     dwarf2_class_flag  = 1 << 5,
 };
 
+extern int word_size;
+
 
 struct dwarf2_cu dwarf2_cu_decode(uint8_t *buf);
-struct dwarf2_abbrevtbl dwarf2_abbrevtbl_decode(uint8_t *buf);
+vector_of(struct dwarf2_abbrev) dwarf2_abbrevtbl_decode(uint8_t *buf, size_t *len);
 
 vector_of(struct dwarf2_cu) dwarf2_cus_decode(struct sect *dinfo);
-vector_of(struct dwarf2_abbrevtbl) dwarf2_abbrevtbls_decode(struct sect *dabbrev);
 
 const char *dwarf2_tag_lookup(uintmax_t tag);
 const char *dwarf2_attrib_lookup(uintmax_t nm);

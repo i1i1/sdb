@@ -7,6 +7,8 @@
 #include "vector.h"
 
 
+int word_size;
+
 #define DW_TAG(str_, tag_) { .str = STRINGIFY(str_), .tag = tag_ },
 static struct {
     uintmax_t tag;
@@ -137,6 +139,33 @@ static struct {
 
 
 static const char *
+desc_dwarf2_class_addr(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+{
+    (void) buf;
+    (void) dstr;
+
+    if (word_size == 4)
+        snprintf(buf, BUFSIZ, "0x%x", *(uint32_t *)die);
+    else if (word_size == 8)
+        snprintf(buf, BUFSIZ, "0x%lx", *(uint64_t *)die);
+    else
+        error("Unknown word size");
+
+    *len = word_size;
+    return buf;
+}
+
+static const char *
+desc_dwarf2_class_str(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+{
+    (void) buf;
+    (void) dstr;
+
+    *len = strlen((char *)die) + 1;
+    return (char *)die;
+}
+
+static const char *
 desc_dwarf2_class_strp(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
 {
     (void) buf;
@@ -190,6 +219,73 @@ desc_dwarf2_class_data8(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *l
     return buf;
 }
 
+static const char *
+desc_dwarf2_class_ref1(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+{
+    (void) dstr;
+
+    snprintf(buf, BUFSIZ, "<0x%x>", *(uint8_t *)die);
+    *len = 1;
+
+    return buf;
+}
+
+static const char *
+desc_dwarf2_class_ref2(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+{
+    (void) dstr;
+
+    snprintf(buf, BUFSIZ, "<0x%x>", *(uint16_t *)die);
+    *len = 2;
+
+    return buf;
+}
+
+static const char *
+desc_dwarf2_class_ref4(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+{
+    (void) dstr;
+
+    snprintf(buf, BUFSIZ, "<0x%x>", *(uint32_t *)die);
+    *len = 4;
+
+    return buf;
+}
+
+static const char *
+desc_dwarf2_class_ref8(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+{
+    (void) dstr;
+
+    snprintf(buf, BUFSIZ, "<0x%lx>", *(uint64_t *)die);
+    *len = 8;
+
+    return buf;
+}
+
+static const char *
+desc_dwarf2_class_block1(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+{
+    (void) dstr;
+
+    snprintf(buf, BUFSIZ, "block of size %d", *(uint8_t *)die);
+    *len = 1 + *(uint8_t *)die;
+
+    return buf;
+}
+
+static const char *
+desc_dwarf2_class_flag(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+{
+    (void) dstr;
+
+    snprintf(buf, BUFSIZ, "%d", *(uint8_t *)die);
+    *len = 1;
+
+    return buf;
+}
+
+
 #define DW_FORM(str_, form_, desc_, class_) \
     {                                       \
         .str = STRINGIFY(str_),             \
@@ -203,25 +299,25 @@ struct dwarf2_form {
     enum dwarf2_class class;
     const char *(*desc)(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len);
 } forms[] = {
-    DW_FORM(addr,        0x01, NULL, dwarf2_class_addr)
+    DW_FORM(addr,        0x01, desc_dwarf2_class_addr, dwarf2_class_addr)
     DW_FORM(block2,      0x03, NULL, dwarf2_class_block)
     DW_FORM(block4,      0x04, NULL, dwarf2_class_block)
     DW_FORM(data2,       0x05, desc_dwarf2_class_data2, dwarf2_class_const)
     DW_FORM(data4,       0x06, desc_dwarf2_class_data4, dwarf2_class_const)
     DW_FORM(data8,       0x07, desc_dwarf2_class_data8, dwarf2_class_const)
-    DW_FORM(string,      0x08, NULL, dwarf2_class_str)
+    DW_FORM(string,      0x08, desc_dwarf2_class_str, dwarf2_class_str)
     DW_FORM(block,       0x09, NULL, dwarf2_class_block)
-    DW_FORM(block1,      0x0a, NULL, dwarf2_class_block)
+    DW_FORM(block1,      0x0a, desc_dwarf2_class_block1, dwarf2_class_block)
     DW_FORM(data1,       0x0b, desc_dwarf2_class_data1, dwarf2_class_const)
-    DW_FORM(flag,        0x0c, NULL, dwarf2_class_flag)
+    DW_FORM(flag,        0x0c, desc_dwarf2_class_flag, dwarf2_class_flag)
     DW_FORM(sdata,       0x0d, NULL, dwarf2_class_const)
     DW_FORM(strp,        0x0e, desc_dwarf2_class_strp, dwarf2_class_str)
     DW_FORM(udata,       0x0f, NULL, dwarf2_class_const)
     DW_FORM(ref_addr,    0x10, NULL, dwarf2_class_ref)
-    DW_FORM(ref1,        0x11, NULL, dwarf2_class_ref)
-    DW_FORM(ref2,        0x12, NULL, dwarf2_class_ref)
-    DW_FORM(ref4,        0x13, NULL, dwarf2_class_ref)
-    DW_FORM(ref8,        0x14, NULL, dwarf2_class_ref)
+    DW_FORM(ref1,        0x11, desc_dwarf2_class_ref1, dwarf2_class_ref)
+    DW_FORM(ref2,        0x12, desc_dwarf2_class_ref2, dwarf2_class_ref)
+    DW_FORM(ref4,        0x13, desc_dwarf2_class_ref4, dwarf2_class_ref)
+    DW_FORM(ref8,        0x14, desc_dwarf2_class_ref8, dwarf2_class_ref)
     DW_FORM(ref_udata,   0x15, NULL, dwarf2_class_ref)
     DW_FORM(indirect,    0x16, NULL, 0)
 };
@@ -289,48 +385,49 @@ dwarf2_attrs_decode(uint8_t *buf, size_t *attrs_len)
     return attrs;
 }
 
-struct dwarf2_abbrevtbl
-dwarf2_abbrevtbl_decode(uint8_t *buf)
+static struct dwarf2_abbrev
+dwarf2_abbrev_decode(uint8_t *buf, size_t *len)
 {
-    size_t attrs_len;
     size_t id_len  = leb_len(buf);
     size_t tag_len = leb_len(buf+id_len);
     vector_of(struct dwarf2_attr) attrs =
-        dwarf2_attrs_decode(buf + id_len + tag_len + 1, &attrs_len);
+        dwarf2_attrs_decode(buf + id_len + tag_len + 1, len);
 
-    return (struct dwarf2_abbrevtbl) {
+    *len += id_len + tag_len + 1; /* 1 is length of field child */
+
+    return (struct dwarf2_abbrev) {
         .id         = uleb_decode(buf),
         .tag        = uleb_decode(buf+id_len),
         .child      = buf[id_len+tag_len],
-        /* 1 is length of field child */
-        .abbrev_len = id_len + tag_len + 1 + attrs_len,
         .attrs      = attrs,
     };
 }
 
-vector_of(struct dwarf2_abbrevtbl)
-dwarf2_abbrevtbls_decode(struct sect *dabbrev)
+vector_of(struct dwarf2_abbrev)
+dwarf2_abbrevtbl_decode(uint8_t *buf, size_t *len)
 {
-    vector_decl(struct dwarf2_abbrevtbl, ret);
-    uint8_t *buf = dabbrev->buf;
-    int remain   = dabbrev->size;
+    vector_decl(struct dwarf2_abbrev, atbl);
 
-    while (remain > 0) {
-        struct dwarf2_abbrevtbl v = dwarf2_abbrevtbl_decode(buf);
+    *len = 0;
 
-        remain -= v.abbrev_len;
-        buf    += v.abbrev_len;
-        vector_push(&ret, v);
+    while (uleb_decode(buf) != 0) {
+        size_t alen;
+
+        vector_push(&atbl, dwarf2_abbrev_decode(buf, &alen));
+        buf += alen;
+        *len += alen;
     }
-
-    return ret;
+    *len += 1;
+    return atbl;
 }
 
 struct dwarf2_cu
 dwarf2_cu_decode(uint8_t *buf)
 {
     return (struct dwarf2_cu) {
-        .cu_len    = *(uint32_t *)buf + 4, /* 4 is sizeof this field itself  */
+        /* 4 is sizeof this field itself  */
+        .cu_len     = *(uint32_t *)buf + 4,
+        .dies_len   = *(uint32_t *)buf - (DWARF2_CUH_SIZE - 4),
         .ver        = *(uint16_t *)(buf + 4),
         .abbrev_off = *(uint32_t *)(buf + 6),
         .word_sz    = *(uint8_t  *)(buf + 10),
@@ -366,6 +463,7 @@ dwarf2_describe_attrib(uint8_t *die, struct dwarf2_attr attr, uint8_t *dstr, siz
 
     if (f->desc)
         return f->desc(die, dstr, buf, len);
+    printf("Todo %s\n", f->str);
     todo();
     return NULL;
 }

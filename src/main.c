@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <assert.h>
 
-#include <asm/unistd.h>
+//#include <asm/unistd.h>
 
 #include <sys/types.h>
 #include <sys/ptrace.h>
@@ -67,6 +67,16 @@ start_debugee(const char **argv)
     return pid;
 }
 
+static struct dwarf2_abbrev *
+abbrev_lookup(vector_of(struct dwarf2_abbrev) *atbl, uintmax_t id)
+{
+    for (unsigned i = 0; i < vector_nmemb(atbl); i++) {
+        if ((*atbl)[i].id == id)
+            return *atbl + i;
+    }
+    return NULL;
+}
+
 void
 load_debug_info(const char *fn)
 {
@@ -96,30 +106,46 @@ load_debug_info(const char *fn)
 
     if (cus[0].ver != 2)
         error("Not a dwarf2 format. Instead dwarf%d\n", cus[0].ver);
+    word_size = cus[0].word_sz;
 
     for (unsigned i = 0; i < vector_nmemb(&cus); i++) {
-        struct dwarf2_abbrevtbl abbrev = dwarf2_abbrevtbl_decode(dabbrev.buf + cus[i].abbrev_off);
+        size_t len;
+        vector_of(struct dwarf2_abbrev) atbl =
+                dwarf2_abbrevtbl_decode(dabbrev.buf + cus[i].abbrev_off, &len);
 
         printf("Compilation unit [%u]\n", i);
-        printf("cuh_len    = 0x%x\n",  cus[i].cu_len);
+        printf("cu_len     = 0x%x\n",  cus[i].cu_len);
         printf("abbrev_off = 0x%x\n",  cus[i].abbrev_off);
         printf("\n");
 
-        printf("   %ld      DW_TAG_%s    [%s children]\n",
-               abbrev.id, dwarf2_tag_lookup(abbrev.tag),
-               abbrev.child ? "has" : "no"
-            );
+        uint8_t *die = cus[i].dies;
+        size_t die_len = cus[i].dies_len;
 
-        uint8_t *die = cus[i].dies + leb_len(cus[i].dies);
+        while (die_len > 0) {
+            struct dwarf2_abbrev *abbrev = abbrev_lookup(&atbl, uleb_decode(die));
 
-        vector_foreach(a, &abbrev.attrs) {
-            size_t len;
+            die_len -= leb_len(die);
+            die += leb_len(die);
 
-            printf("    DW_AT_%-8s\tDW_FORM_%s\t%s\n",
-                   dwarf2_attrib_lookup(a.name),
-                   dwarf2_form_lookup(a.form),
-                   dwarf2_describe_attrib(die, a, dstr.buf, &len));
-            die += len;
+            if (!abbrev) {
+                printf("    Abbrev 0\n");
+                continue;
+            }
+
+            printf("   %ld      DW_TAG_%s    [%s children]\n",
+                   abbrev->id, dwarf2_tag_lookup(abbrev->tag),
+                   abbrev->child ? "has" : "no");
+
+            vector_foreach(a, &abbrev->attrs) {
+                size_t len;
+
+                printf("    DW_AT_%-8s\tDW_FORM_%s\t%s\n",
+                       dwarf2_attrib_lookup(a.name),
+                       dwarf2_form_lookup(a.form),
+                       dwarf2_describe_attrib(die, a, dstr.buf, &len));
+                die_len -= len;
+                die     += len;
+            }
         }
     }
 
