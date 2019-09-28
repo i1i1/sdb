@@ -12,6 +12,7 @@
 struct dwarf2_attr {
     uintmax_t name;
     uintmax_t form;
+    uint8_t  *addr;
 };
 
 struct dwarf2_die {
@@ -31,7 +32,7 @@ struct dwarf2_cu {
 struct dwarf2_abbrev {
     size_t id;
     uintmax_t tag;
-    uint8_t child;
+    vector_of(struct dwarf2_abbrev) children;
     vector_of(struct dwarf2_attr) attrs;
 };
 
@@ -48,7 +49,7 @@ extern int word_size;
 
 
 struct dwarf2_cu dwarf2_cu_decode(uint8_t *buf);
-vector_of(struct dwarf2_abbrev) dwarf2_abbrevtbl_decode(uint8_t *buf, size_t *len);
+struct dwarf2_abbrev dwarf2_abbrevtbl_decode(uint8_t *buf, size_t *len);
 
 vector_of(struct dwarf2_cu) dwarf2_cus_decode(struct sect *dinfo);
 

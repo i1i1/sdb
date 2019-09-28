@@ -220,6 +220,28 @@ desc_dwarf2_class_data8(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *l
 }
 
 static const char *
+desc_dwarf2_class_udata(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+{
+    (void) dstr;
+
+    *len = leb_len(die);
+    snprintf(buf, BUFSIZ, "%ld", uleb_decode(die));
+
+    return buf;
+}
+
+static const char *
+desc_dwarf2_class_sdata(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+{
+    (void) dstr;
+
+    *len = leb_len(die);
+    snprintf(buf, BUFSIZ, "%ld", sleb_decode(die));
+
+    return buf;
+}
+
+static const char *
 desc_dwarf2_class_ref1(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
 {
     (void) dstr;
@@ -310,9 +332,9 @@ struct dwarf2_form {
     DW_FORM(block1,      0x0a, desc_dwarf2_class_block1, dwarf2_class_block)
     DW_FORM(data1,       0x0b, desc_dwarf2_class_data1, dwarf2_class_const)
     DW_FORM(flag,        0x0c, desc_dwarf2_class_flag, dwarf2_class_flag)
-    DW_FORM(sdata,       0x0d, NULL, dwarf2_class_const)
+    DW_FORM(sdata,       0x0d, desc_dwarf2_class_sdata, dwarf2_class_const)
     DW_FORM(strp,        0x0e, desc_dwarf2_class_strp, dwarf2_class_str)
-    DW_FORM(udata,       0x0f, NULL, dwarf2_class_const)
+    DW_FORM(udata,       0x0f, desc_dwarf2_class_udata, dwarf2_class_const)
     DW_FORM(ref_addr,    0x10, NULL, dwarf2_class_ref)
     DW_FORM(ref1,        0x11, desc_dwarf2_class_ref1, dwarf2_class_ref)
     DW_FORM(ref2,        0x12, desc_dwarf2_class_ref2, dwarf2_class_ref)
@@ -385,40 +407,50 @@ dwarf2_attrs_decode(uint8_t *buf, size_t *attrs_len)
     return attrs;
 }
 
-static struct dwarf2_abbrev
-dwarf2_abbrev_decode(uint8_t *buf, size_t *len)
-{
-    size_t id_len  = leb_len(buf);
-    size_t tag_len = leb_len(buf+id_len);
-    vector_of(struct dwarf2_attr) attrs =
-        dwarf2_attrs_decode(buf + id_len + tag_len + 1, len);
-
-    *len += id_len + tag_len + 1; /* 1 is length of field child */
-
-    return (struct dwarf2_abbrev) {
-        .id         = uleb_decode(buf),
-        .tag        = uleb_decode(buf+id_len),
-        .child      = buf[id_len+tag_len],
-        .attrs      = attrs,
-    };
-}
-
-vector_of(struct dwarf2_abbrev)
+struct dwarf2_abbrev
 dwarf2_abbrevtbl_decode(uint8_t *buf, size_t *len)
 {
-    vector_decl(struct dwarf2_abbrev, atbl);
+    size_t id_len  = leb_len(buf);
 
-    *len = 0;
+    if (uleb_decode(buf) == 0) {
+        *len = id_len;
+        return (struct dwarf2_abbrev) {
+            .id = 0,
+        };
+    }
 
-    while (uleb_decode(buf) != 0) {
+    size_t tag_len = leb_len(buf+id_len);
+    size_t attrs_len;
+    vector_of(struct dwarf2_attr) attrs =
+        dwarf2_attrs_decode(buf + id_len + tag_len + 1, &attrs_len);
+    int has_children = buf[id_len+tag_len];
+    vector_decl(struct dwarf2_abbrev, children);
+
+    *len = attrs_len + id_len + tag_len + 1; /* 1 is length of field child */
+
+    if (has_children) {
+        struct dwarf2_abbrev atbl;
+        size_t children_len = 0;
+        uint8_t *tbl = buf + *len;
         size_t alen;
 
-        vector_push(&atbl, dwarf2_abbrev_decode(buf, &alen));
-        buf += alen;
-        *len += alen;
+        do {
+            atbl = dwarf2_abbrevtbl_decode(tbl, &alen);
+            children_len += alen;
+            tbl += alen;
+
+            vector_push(&children, atbl);
+        } while (atbl.id != 0);
+
+        *len += children_len;
     }
-    *len += 1;
-    return atbl;
+
+    return (struct dwarf2_abbrev) {
+        .id       = uleb_decode(buf),
+        .tag      = uleb_decode(buf+id_len),
+        .children = children,
+        .attrs    = attrs,
+    };
 }
 
 struct dwarf2_cu

@@ -68,12 +68,17 @@ start_debugee(const char **argv)
 }
 
 static struct dwarf2_abbrev *
-abbrev_lookup(vector_of(struct dwarf2_abbrev) *atbl, uintmax_t id)
+abbrev_lookup(struct dwarf2_abbrev *atbl, uintmax_t id)
 {
-    for (unsigned i = 0; i < vector_nmemb(atbl); i++) {
-        if ((*atbl)[i].id == id)
-            return *atbl + i;
+    if (atbl->id == id)
+        return atbl;
+
+    for (unsigned i = 0; i < vector_nmemb(&atbl->children); i++) {
+        struct dwarf2_abbrev *ret = abbrev_lookup(atbl->children + i, id);
+        if (ret)
+            return ret;
     }
+
     return NULL;
 }
 
@@ -110,8 +115,7 @@ load_debug_info(const char *fn)
 
     for (unsigned i = 0; i < vector_nmemb(&cus); i++) {
         size_t len;
-        vector_of(struct dwarf2_abbrev) atbl =
-                dwarf2_abbrevtbl_decode(dabbrev.buf + cus[i].abbrev_off, &len);
+        struct dwarf2_abbrev atbl = dwarf2_abbrevtbl_decode(dabbrev.buf + cus[i].abbrev_off, &len);
 
         printf("Compilation unit [%u]\n", i);
         printf("cu_len     = 0x%x\n",  cus[i].cu_len);
@@ -122,7 +126,8 @@ load_debug_info(const char *fn)
         size_t die_len = cus[i].dies_len;
 
         while (die_len > 0) {
-            struct dwarf2_abbrev *abbrev = abbrev_lookup(&atbl, uleb_decode(die));
+            struct dwarf2_abbrev *abbrev =
+                abbrev_lookup(&atbl, uleb_decode(die));
 
             die_len -= leb_len(die);
             die += leb_len(die);
@@ -134,7 +139,7 @@ load_debug_info(const char *fn)
 
             printf("   %ld      DW_TAG_%s    [%s children]\n",
                    abbrev->id, dwarf2_tag_lookup(abbrev->tag),
-                   abbrev->child ? "has" : "no");
+                   abbrev->children ? "has" : "no");
 
             vector_foreach(a, &abbrev->attrs) {
                 size_t len;

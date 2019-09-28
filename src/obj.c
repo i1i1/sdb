@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "macro.h"
+#include "utils.h"
 #include "elf64.h"
 #include "obj.h"
 
@@ -45,16 +46,12 @@ file_init(const char *fn)
     struct obj *ret = malloc(sizeof(*ret));
     FILE *fp;
 
-    if (ret == NULL)
-        goto err0;
     if ((fp = fopen(fn, "r")) == NULL)
         goto err1;
 
     ret->sz = file_len(fp);
-    ret->fb = malloc(ret->sz);
+    ret->fb = xmalloc(ret->sz);
 
-    if (ret->fb == NULL)
-        goto err2;
     if (fread(ret->fb, 1, ret->sz, fp) != ret->sz)
         goto err2;
 
@@ -65,7 +62,6 @@ err2:
     fclose(fp);
 err1:
     free(ret);
-err0:
     return NULL;
 }
 

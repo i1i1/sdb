@@ -59,3 +59,21 @@ sleb_decode(uint8_t *buf)
     return res;
 }
 
+void *
+xmalloc(size_t sz)
+{
+    void *ret = malloc(sz);
+    if (!ret)
+        error("malloc error\n");
+    return ret;
+}
+
+void *
+xrealloc(void *a, size_t sz)
+{
+    void *ret = realloc(a, sz);
+    if (!ret)
+        error("realloc error\n");
+    return ret;
+}
+
