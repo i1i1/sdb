@@ -17,7 +17,7 @@
 #include "macro.h"
 #include "utils.h"
 #include "obj.h"
-#include "dwarf2.h"
+#include "dwarf.h"
 #include "vector.h"
 
 
@@ -67,14 +67,14 @@ start_debugee(const char **argv)
     return pid;
 }
 
-static struct dwarf2_abbrev *
-abbrev_lookup(struct dwarf2_abbrev *atbl, uintmax_t id)
+static struct dwarf_abbrev *
+abbrev_lookup(struct dwarf_abbrev *atbl, uintmax_t id)
 {
     if (atbl->id == id)
         return atbl;
 
     for (unsigned i = 0; i < vector_nmemb(&atbl->children); i++) {
-        struct dwarf2_abbrev *ret = abbrev_lookup(atbl->children + i, id);
+        struct dwarf_abbrev *ret = abbrev_lookup(atbl->children + i, id);
         if (ret)
             return ret;
     }
@@ -107,26 +107,26 @@ load_debug_info(const char *fn)
     printf("dstr_len    = 0x%lx\n", dstr.size);
     printf("\n");
 
-    vector_of(struct dwarf2_cu) cus = dwarf2_cus_decode(&dinfo);
+    vector_of(struct dwarf_cu) cus = dwarf_cus_decode(&dinfo);
 
-    if (cus[0].ver != 2)
-        error("Not a dwarf2 format. Instead dwarf%d\n", cus[0].ver);
+    if (cus[0].ver > 3)
+        error("Not a dwarf format. Instead dwarf%d\n", cus[0].ver);
     word_size = cus[0].word_sz;
 
     for (unsigned i = 0; i < vector_nmemb(&cus); i++) {
         size_t len;
-        struct dwarf2_abbrev atbl = dwarf2_abbrevtbl_decode(dabbrev.buf + cus[i].abbrev_off, &len);
+        struct dwarf_abbrev atbl = dwarf_abbrevtbl_decode(dabbrev.buf + cus[i].abbrev_off, &len);
 
         printf("Compilation unit [%u]\n", i);
-        printf("cu_len     = 0x%x\n",  cus[i].cu_len);
-        printf("abbrev_off = 0x%x\n",  cus[i].abbrev_off);
+        printf("cu_len     = 0x%lx\n",  cus[i].cu_len);
+        printf("abbrev_off = 0x%lx\n",  cus[i].abbrev_off);
         printf("\n");
 
         uint8_t *die = cus[i].dies;
         size_t die_len = cus[i].dies_len;
 
         while (die_len > 0) {
-            struct dwarf2_abbrev *abbrev =
+            struct dwarf_abbrev *abbrev =
                 abbrev_lookup(&atbl, uleb_decode(die));
 
             die_len -= leb_len(die);
@@ -138,16 +138,16 @@ load_debug_info(const char *fn)
             }
 
             printf("   %ld      DW_TAG_%s    [%s children]\n",
-                   abbrev->id, dwarf2_tag_lookup(abbrev->tag),
+                   abbrev->id, dwarf_tag_lookup(abbrev->tag),
                    abbrev->children ? "has" : "no");
 
             vector_foreach(a, &abbrev->attrs) {
                 size_t len;
 
                 printf("    DW_AT_%-8s\tDW_FORM_%s\t%s\n",
-                       dwarf2_attrib_lookup(a.name),
-                       dwarf2_form_lookup(a.form),
-                       dwarf2_describe_attrib(die, a, dstr.buf, &len));
+                       dwarf_attrib_lookup(a.name),
+                       dwarf_form_lookup(a.form),
+                       dwarf_describe_attrib(die, a, dstr.buf, &len));
                 die_len -= len;
                 die     += len;
             }
