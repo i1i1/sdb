@@ -6,6 +6,11 @@
 #include "utils.h"
 #include "vector.h"
 
+#define BUF_READ(buf_, var_, type_) do {                \
+           (var_)  = *(type_ *)(buf_);                  \
+           (buf_) += sizeof(type_);                     \
+    } while (0)
+
 
 int word_size;
 
@@ -485,11 +490,6 @@ dwarf_cu_decode(uint8_t *buf)
 {
     struct dwarf_cu ret;
 
-#define BUF_READ(buf_, var_, type_) do {                \
-           (var_)  = *(type_ *)(buf_);                  \
-           (buf_) += sizeof(type_);                     \
-    } while (0)
-
     BUF_READ(buf, ret.cu_len, uint32_t);
     ret.is_64 = (ret.cu_len == 0xFFFFFFFF) ? true : false;
 
@@ -514,7 +514,6 @@ dwarf_cu_decode(uint8_t *buf)
     ret.dies_len -= sizeof(uint8_t);
     ret.dies = buf;
 
-#undef BUF_READ
     return ret;
 }
 
@@ -534,6 +533,111 @@ dwarf_cus_decode(struct sect *dinfo)
     }
 
     return ret;
+}
+
+static struct dwarf_prol
+prologue_decode(uint8_t *buf, size_t *len)
+{
+    uint8_t *start_buf = buf;
+    struct dwarf_prol ret;
+
+    BUF_READ(buf, ret.unit_len, uint32_t);
+    ret.is_64 = (ret.unit_len == 0xFFFFFFFF);
+
+    if (ret.is_64)
+        BUF_READ(buf, ret.unit_len, uint64_t);
+
+    BUF_READ(buf, ret.ver, uint16_t);
+
+    if (ret.is_64)
+        BUF_READ(buf, ret.header_len, uint64_t);
+    else
+        BUF_READ(buf, ret.header_len, uint32_t);
+
+    BUF_READ(buf, ret.inst_len,    uint8_t);
+    BUF_READ(buf, ret.def_is_stmt, uint8_t);
+    BUF_READ(buf, ret.line_base,   int8_t);
+    BUF_READ(buf, ret.line_range,  uint8_t);
+    BUF_READ(buf, ret.op_base, uint8_t);
+
+    ret.std_op_lens = NULL;
+    ret.inc_dirs    = NULL;
+    ret.fnames      = NULL;
+
+    for (int i = 1; i < ret.op_base; i++) {
+        uint8_t ln;
+        BUF_READ(buf, ln, uint8_t);
+        vector_push(&ret.std_op_lens, ln);
+    }
+
+    while (!STREQ((char *)buf, "")) {
+        vector_push(&ret.inc_dirs, (char *)buf);
+        buf += strlen((char *)buf) + 1;
+    }
+
+    buf += 1;
+
+    while (!STREQ((char *)buf, "")) {
+        struct dwarf_prol_file f;
+
+        f.fn = (char *)buf;
+        buf += strlen((char *)buf) + 1;
+        f.dir_idx = uleb_decode(buf);
+        buf += leb_len(buf);
+        f.last_mod_time = uleb_decode(buf);
+        buf += leb_len(buf);
+        f.flen = uleb_decode(buf);
+        buf += leb_len(buf);
+
+        vector_push(&ret.fnames, f);
+    }
+    *len = buf - start_buf + 1;
+    return ret;
+}
+
+void
+dwarf_line_decode(struct sect *dline)
+{
+    struct machine {
+        size_t addr;
+        unsigned file;
+        unsigned line;
+        unsigned column;
+        bool is_stmt;
+        bool basic_block;
+        bool end_seq;
+        bool prol_end;
+        bool epil_beg;
+        unsigned isa;
+    };
+
+    size_t len;
+    struct dwarf_prol prol = prologue_decode(dline->buf, &len);
+    uint8_t *buf = dline->buf + len;
+    struct machine m = {
+        .addr        = 0,
+        .file        = 1,
+        .line        = 1,
+        .column      = 0,
+        .is_stmt     = prol.def_is_stmt,
+        .basic_block = false,
+        .end_seq     = false,
+        .prol_end    = false,
+        .epil_beg    = false,
+        .isa         = 0,
+    };
+
+    printf("off       = 0x%x\n", len);
+    printf("len       = %d\n", prol.unit_len);
+    printf("op_base   = 0x%x\n", prol.op_base);
+    printf("line_base = %d\n", prol.line_base);
+
+    for (int i = 0; i < 16;) {
+        printf("%02x ", buf[i]);
+        if (++i % 4 == 0)
+            printf("\n");
+    }
+    printf("\n");
 }
 
 const char *

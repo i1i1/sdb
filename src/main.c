@@ -86,7 +86,7 @@ void
 load_debug_info(const char *fn)
 {
     struct obj *o;
-    struct sect dinfo, dabbrev, dstr;
+    struct sect dinfo, dabbrev, dstr, dline;
 
     if ((o = obj_init(fn)) == NULL)
         error("Not an object\n");
@@ -94,6 +94,7 @@ load_debug_info(const char *fn)
     dinfo   = obj_get_sect_by_name(o, ".debug_info");
     dabbrev = obj_get_sect_by_name(o, ".debug_abbrev");
     dstr    = obj_get_sect_by_name(o, ".debug_str");
+    dline   = obj_get_sect_by_name(o, ".debug_line");
 
     if (dinfo.name == NULL)
         error("No `.debug_info' section\n");
@@ -101,12 +102,17 @@ load_debug_info(const char *fn)
         error("No `.debug_abbrev' section\n");
     if (dstr.name == NULL)
         error("No `.debug_str' section\n");
+    if (dline.name == NULL)
+        error("No `.debug_line' section\n");
 
+    printf("start       = 0x%lx\n\n", obj_get_start(o));
     printf("dinfo_len   = 0x%lx\n", dinfo.size);
     printf("dabbrev_len = 0x%lx\n", dabbrev.size);
     printf("dstr_len    = 0x%lx\n", dstr.size);
+    printf("dline_len   = 0x%lx\n", dline.size);
     printf("\n");
 
+    dwarf_line_decode(&dline);
     vector_of(struct dwarf_cu) cus = dwarf_cus_decode(&dinfo);
 
     if (cus[0].ver > 3)

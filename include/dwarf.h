@@ -36,6 +36,29 @@ struct dwarf_abbrev {
     vector_of(struct dwarf_attr) attrs;
 };
 
+struct dwarf_prol_file {
+    char *fn;
+    uintmax_t dir_idx;
+    uintmax_t last_mod_time;
+    uintmax_t flen;
+};
+
+struct dwarf_prol {
+    uint64_t unit_len;
+    uint16_t ver;
+    uint64_t header_len;
+    uint8_t  inst_len;
+    uint8_t  def_is_stmt;
+    int8_t   line_base;
+    uint8_t  line_range;
+    uint8_t  op_base;
+    vector_of(uint8_t) std_op_lens;
+    vector_of(char *)  inc_dirs;
+    vector_of(struct dwarf_prol_file) fnames;
+
+    bool is_64;
+};
+
 enum dwarf_class {
     dwarf_class_ref   = 1 << 0,
     dwarf_class_block = 1 << 1,
@@ -48,6 +71,7 @@ enum dwarf_class {
 extern int word_size;
 
 
+void dwarf_line_decode(struct sect *dline);
 struct dwarf_cu dwarf_cu_decode(uint8_t *buf);
 struct dwarf_abbrev dwarf_abbrevtbl_decode(uint8_t *buf, size_t *len);
 
