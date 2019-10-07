@@ -59,6 +59,12 @@ struct dwarf_prol {
     bool is_64;
 };
 
+struct dwarf_machine {
+    uint64_t addr;
+    unsigned file;
+    unsigned line;
+};
+
 enum dwarf_class {
     dwarf_class_ref   = 1 << 0,
     dwarf_class_block = 1 << 1,

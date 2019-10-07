@@ -536,7 +536,7 @@ dwarf_cus_decode(struct sect *dinfo)
 }
 
 static struct dwarf_prol
-prologue_decode(uint8_t *buf, size_t *len)
+line_header_decode(uint8_t *buf, size_t *len)
 {
     uint8_t *start_buf = buf;
     struct dwarf_prol ret;
@@ -596,48 +596,108 @@ prologue_decode(uint8_t *buf, size_t *len)
 }
 
 void
+op_ext(struct dwarf_machine *m, uint8_t *buf, size_t *size)
+{
+    enum DW_LNE {
+        end_sequence = 0x01,
+        set_address  = 0x02,
+        define_file  = 0x03,
+    };
+    size_t sz_len = leb_len(buf);
+    uintmax_t sz = uleb_decode(buf);
+
+    *size = sz + sz_len;
+    buf += sz_len;
+
+    switch (*buf++) {
+    case end_sequence:
+        *m = (struct dwarf_machine) {
+            .addr = 0,
+            .file = 1,
+            .line = 1,
+        };
+        break;
+    case set_address:
+        switch (sz - 1) {
+        case 4:
+            m->addr = *(uint32_t *)buf;
+            break;
+        case 8:
+            m->addr = *(uint64_t *)buf;
+            break;
+        default:
+            error("DW_LNE_set_address: unknown size of address - %d\n", (int)sz);
+        }
+
+        break;
+    case define_file:
+        todo();
+        break;
+    default:
+        error("Unknown extended opcode - %d\n", buf[-1]);
+    }
+}
+
+void
 dwarf_line_decode(struct sect *dline)
 {
-    struct machine {
-        size_t addr;
-        unsigned file;
-        unsigned line;
-        unsigned column;
-        bool is_stmt;
-        bool basic_block;
-        bool end_seq;
-        bool prol_end;
-        bool epil_beg;
-        unsigned isa;
+    struct opcode {
+        char *type;
+        char *name;
+        void (*handler)(struct dwarf_machine *, uint8_t *, size_t *);
     };
+
+
+    struct opcode ops[] = {
+        [0x00] = { "extended", "extended", op_ext },
+    };
+
 
     size_t len;
-    struct dwarf_prol prol = prologue_decode(dline->buf, &len);
+    struct dwarf_prol prol = line_header_decode(dline->buf, &len);
     uint8_t *buf = dline->buf + len;
-    struct machine m = {
-        .addr        = 0,
-        .file        = 1,
-        .line        = 1,
-        .column      = 0,
-        .is_stmt     = prol.def_is_stmt,
-        .basic_block = false,
-        .end_seq     = false,
-        .prol_end    = false,
-        .epil_beg    = false,
-        .isa         = 0,
+    struct dwarf_machine m = {
+        .addr    = 0,
+        .file    = 1,
+        .line    = 1,
     };
+    ssize_t rem = dline->size - len;
 
-    printf("off       = 0x%x\n", len);
-    printf("len       = %d\n", prol.unit_len);
+    printf("off       = 0x%lx\n", len);
+    printf("len       = %ld\n", prol.unit_len);
     printf("op_base   = 0x%x\n", prol.op_base);
     printf("line_base = %d\n", prol.line_base);
+    printf("\n");
 
-    for (int i = 0; i < 16;) {
+    for (int i = 0; i < 32;) {
         printf("%02x ", buf[i]);
-        if (++i % 4 == 0)
+        i++;
+        if (i % 4 == 0)
+            printf("\n");
+        if (i % 16 == 0)
             printf("\n");
     }
     printf("\n");
+
+    size_t buf_backup = (size_t)buf;
+
+    while (rem > 0) {
+        struct opcode *op = ops + buf[0];
+        size_t sz;
+
+        if (ARRAY_SIZE(ops) <= buf[0] || op->name == NULL)
+            error("todo op - 0x%x\n", buf[0]);
+
+        buf++;
+        op->handler(&m, buf, &sz);
+        sz++;
+        printf(" [0x%04lx] %s opcode `%s'; length is - 0x%02lx, next is [0x%04lx]\n",
+           (size_t)(len + buf-buf_backup-1),
+           op->type, op->name, sz,
+           (size_t)(len + buf-buf_backup-1 + sz));
+        buf += sz;
+        rem -= sz;
+    }
 }
 
 const char *
