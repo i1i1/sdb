@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <assert.h>
+#include <ctype.h>
 
 //#include <asm/unistd.h>
 
@@ -67,102 +68,51 @@ start_debugee(const char **argv)
     return pid;
 }
 
-static struct dwarf_abbrev *
-abbrev_lookup(struct dwarf_abbrev *atbl, uintmax_t id)
-{
-    if (atbl->id == id)
-        return atbl;
-
-    for (unsigned i = 0; i < vector_nmemb(&atbl->children); i++) {
-        struct dwarf_abbrev *ret = abbrev_lookup(atbl->children + i, id);
-        if (ret)
-            return ret;
-    }
-
-    return NULL;
-}
-
 void
-load_debug_info(const char *fn)
+test_dwarf(const char *fn)
 {
     struct obj *o;
-    struct sect dinfo, dabbrev, dstr, dline;
 
     if ((o = obj_init(fn)) == NULL)
         error("Not an object\n");
 
-    dinfo   = obj_get_sect_by_name(o, ".debug_info");
-    dabbrev = obj_get_sect_by_name(o, ".debug_abbrev");
-    dstr    = obj_get_sect_by_name(o, ".debug_str");
-    dline   = obj_get_sect_by_name(o, ".debug_line");
-
-    if (dinfo.name == NULL)
-        error("No `.debug_info' section\n");
-    if (dabbrev.name == NULL)
-        error("No `.debug_abbrev' section\n");
-    if (dstr.name == NULL)
-        error("No `.debug_str' section\n");
-    if (dline.name == NULL)
-        error("No `.debug_line' section\n");
-
-    printf("start       = 0x%lx\n\n", obj_get_start(o));
-    printf("dinfo_len   = 0x%lx\n", dinfo.size);
-    printf("dabbrev_len = 0x%lx\n", dabbrev.size);
-    printf("dstr_len    = 0x%lx\n", dstr.size);
-    printf("dline_len   = 0x%lx\n", dline.size);
-    printf("\n");
-
-    dwarf_line_decode(&dline);
-    vector_of(struct dwarf_cu) cus = dwarf_cus_decode(&dinfo);
-
-    if (cus[0].ver > 3)
-        error("Not a dwarf format. Instead dwarf%d\n", cus[0].ver);
-    word_size = cus[0].word_sz;
-
-    for (unsigned i = 0; i < vector_nmemb(&cus); i++) {
+    for (;;) {
+        char *buf;
         size_t len;
-        struct dwarf_abbrev atbl = dwarf_abbrevtbl_decode(dabbrev.buf + cus[i].abbrev_off, &len);
 
-        printf("Compilation unit [%u]\n", i);
-        printf("cu_len     = 0x%lx\n",  cus[i].cu_len);
-        printf("abbrev_off = 0x%lx\n",  cus[i].abbrev_off);
-        printf("\n");
+        printf(">> ");
+        getline(&buf, &len, stdin);
 
-        uint8_t *die = cus[i].dies;
-        size_t die_len = cus[i].dies_len;
+        if (STREQ(buf, "end\n"))
+            break;
 
-        while (die_len > 0) {
-            struct dwarf_abbrev *abbrev =
-                abbrev_lookup(&atbl, uleb_decode(die));
+        size_t addr = 0;
+        int i;
 
-            die_len -= leb_len(die);
-            die += leb_len(die);
-
-            if (!abbrev) {
-                printf("    Abbrev 0\n");
-                continue;
-            }
-
-            printf("   %ld      DW_TAG_%s    [%s children]\n",
-                   abbrev->id, dwarf_tag_lookup(abbrev->tag),
-                   abbrev->children ? "has" : "no");
-
-            vector_foreach(a, &abbrev->attrs) {
-                size_t len;
-
-                printf("    DW_AT_%-8s\tDW_FORM_%s\t%s\n",
-                       dwarf_attrib_lookup(a.name),
-                       dwarf_form_lookup(a.form),
-                       dwarf_describe_attrib(die, a, dstr.buf, &len));
-                die_len -= len;
-                die     += len;
-            }
+        for (i = 0; buf[i] && isxdigit(buf[i]); i++) {
+            addr *= 16;
+            if ('0' <= buf[i] && buf[i] <= '9')
+                addr += buf[i] - '0';
+            else if ('A' <= buf[i] && buf[i] <= 'F')
+                addr += buf[i] - 'A' + 10;
+            else// if ('a' <= buf[i] && buf[i] <= 'f')
+                addr += buf[i] - 'a' + 10;
         }
+
+        if (buf[i] != '\n') {
+            printf("Error!\n");
+            free(buf);
+        }
+
+        struct line ln = dwarf_addr2line(o, addr);
+
+        printf("\t%s:%d\n", ln.fn, ln.nu);
+        vector_free(&ln.fn);
+        free(buf);
     }
 
     printf("File size = %ld\n", o->sz);
     obj_deinit(o);
-    vector_free(&cus);
 }
 
 int
@@ -180,7 +130,7 @@ main(int argc, const char *argv[])
 
     argv++;
 
-    load_debug_info(argv[0]);
+    test_dwarf(argv[0]);
     pid = start_debugee(argv);
 
     return 0;

@@ -6,6 +6,8 @@
 #include "utils.h"
 #include "vector.h"
 
+#include "dwarf_db.h"
+
 #define BUF_READ(buf_, var_, type_) do {                \
            (var_)  = *(type_ *)(buf_);                  \
            (buf_) += sizeof(type_);                     \
@@ -14,364 +16,230 @@
 
 int word_size;
 
-#define DW_TAG(str_, tag_) { .str = STRINGIFY(str_), .tag = tag_ },
-static struct {
-    uintmax_t tag;
-    char *str;
-} tags[] = {
-    DW_TAG(array_type,             0x01)
-    DW_TAG(class_type,             0x02)
-    DW_TAG(entry_point,            0x03)
-    DW_TAG(enumeration_type,       0x04)
-    DW_TAG(formal_parameter,       0x05)
-    DW_TAG(imported_declaration,   0x08)
-    DW_TAG(label,                  0x0a)
-    DW_TAG(lexical_block,          0x0b)
-    DW_TAG(member,                 0x0d)
-    DW_TAG(pointer_type,           0x0f)
-    DW_TAG(reference_type,         0x10)
-    DW_TAG(compile_unit,           0x11)
-    DW_TAG(string_type,            0x12)
-    DW_TAG(structure_type,         0x13)
-    DW_TAG(subroutine_type,        0x15)
-    DW_TAG(typedef,                0x16)
-    DW_TAG(union_type,             0x17)
-    DW_TAG(unspecified_parameters, 0x18)
-    DW_TAG(variant,                0x19)
-    DW_TAG(common_block,           0x1a)
-    DW_TAG(common_inclusion,       0x1b)
-    DW_TAG(inheritance,            0x1c)
-    DW_TAG(inlined_subroutine,     0x1d)
-    DW_TAG(module,                 0x1e)
-    DW_TAG(ptr_to_member_type,     0x1f)
-    DW_TAG(set_type,               0x20)
-    DW_TAG(subrange_type,          0x21)
-    DW_TAG(with_stmt,              0x22)
-    DW_TAG(access_declaration,     0x23)
-    DW_TAG(base_type,              0x24)
-    DW_TAG(catch_block,            0x25)
-    DW_TAG(const_type,             0x26)
-    DW_TAG(constant,               0x27)
-    DW_TAG(enumerator,             0x28)
-    DW_TAG(file_type,              0x29)
-    DW_TAG(friend,                 0x2a)
-    DW_TAG(namelist,               0x2b)
-    DW_TAG(namelist_item,          0x2c)
-    DW_TAG(packed_type,            0x2d)
-    DW_TAG(subprogram,             0x2e)
-    DW_TAG(template_type_param,    0x2f)
-    DW_TAG(template_value_param,   0x30)
-    DW_TAG(thrown_type,            0x31)
-    DW_TAG(try_block,              0x32)
-    DW_TAG(variant_part,           0x33)
-    DW_TAG(variable,               0x34)
-    DW_TAG(volatile_type,          0x35)
+
+void op_ext(struct dwarf_machine *m, uint8_t *buf, size_t *size);
+
+struct opcode {
+    char *type;
+    char *name;
+    void (*handler)(struct dwarf_machine *, uint8_t *, size_t *);
+} ops[] = {
+    [0x00] = { "extended", "extended", op_ext },
 };
-#undef DW_TAG
-
-#define DW_AT(str_, attr_, class_) \
-    {                              \
-        .attr = attr_,             \
-        .str = STRINGIFY(str_),    \
-        .class = class_            \
-    },
-static struct {
-    uintmax_t attr;
-    char *str;
-    enum dwarf_class class;
-} attribs[] = {
-    DW_AT(sibling,                0x01, dwarf_class_ref)
-    DW_AT(location,               0x02, dwarf_class_block|dwarf_class_const)
-    DW_AT(name,                   0x03, dwarf_class_str)
-    DW_AT(ordering,               0x09, dwarf_class_const)
-    DW_AT(byte_size,              0x0b, dwarf_class_const)
-    DW_AT(bit_offset,             0x0c, dwarf_class_const)
-    DW_AT(bit_size,               0x0d, dwarf_class_const)
-    DW_AT(stmt_list,              0x10, dwarf_class_const)
-    DW_AT(low_pc,                 0x11, dwarf_class_addr)
-    DW_AT(high_pc,                0x12, dwarf_class_addr)
-    DW_AT(language,               0x13, dwarf_class_const)
-    DW_AT(discr,                  0x15, dwarf_class_ref)
-    DW_AT(discr_value,            0x16, dwarf_class_const)
-    DW_AT(visibility,             0x17, dwarf_class_const)
-    DW_AT(import,                 0x18, dwarf_class_ref)
-    DW_AT(string_length,          0x19, dwarf_class_block|dwarf_class_const)
-    DW_AT(common_reference,       0x1a, dwarf_class_ref)
-    DW_AT(comp_dir,               0x1b, dwarf_class_str)
-    DW_AT(const_value,            0x1c, dwarf_class_str|dwarf_class_block|dwarf_class_const)
-    DW_AT(containing_type,        0x1d, dwarf_class_ref)
-    DW_AT(default_value,          0x1e, dwarf_class_ref)
-    DW_AT(inline,                 0x20, dwarf_class_const)
-    DW_AT(is_optional,            0x21, dwarf_class_flag)
-    DW_AT(lower_bound,            0x22, dwarf_class_ref|dwarf_class_const)
-    DW_AT(producer,               0x25, dwarf_class_str)
-    DW_AT(prototyped,             0x27, dwarf_class_flag)
-    DW_AT(return_addr,            0x2a, dwarf_class_block|dwarf_class_const)
-    DW_AT(start_scope,            0x2c, dwarf_class_const)
-    DW_AT(stride_size,            0x2e, dwarf_class_const)
-    DW_AT(upper_bound,            0x2f, dwarf_class_ref|dwarf_class_const)
-    DW_AT(abstract_origin,        0x31, dwarf_class_ref)
-    DW_AT(accessibility,          0x32, dwarf_class_const)
-    DW_AT(address_class,          0x33, dwarf_class_const)
-    DW_AT(artificial,             0x34, dwarf_class_flag)
-    DW_AT(base_types,             0x35, dwarf_class_ref)
-    DW_AT(calling_convention,     0x36, dwarf_class_const)
-    DW_AT(count,                  0x37, dwarf_class_ref|dwarf_class_const)
-    DW_AT(data_member_location,   0x38, dwarf_class_block|dwarf_class_ref)
-    DW_AT(decl_column,            0x39, dwarf_class_const)
-    DW_AT(decl_file,              0x3a, dwarf_class_const)
-    DW_AT(decl_line,              0x3b, dwarf_class_const)
-    DW_AT(declaration,            0x3c, dwarf_class_flag)
-    DW_AT(discr_list,             0x3d, dwarf_class_block)
-    DW_AT(encoding,               0x3e, dwarf_class_const)
-    DW_AT(external,               0x3f, dwarf_class_flag)
-    DW_AT(frame_base,             0x40, dwarf_class_block|dwarf_class_const)
-    DW_AT(friend,                 0x41, dwarf_class_ref)
-    DW_AT(identifier_case,        0x42, dwarf_class_const)
-    DW_AT(macro_info,             0x43, dwarf_class_const)
-    DW_AT(namelist_item,          0x44, dwarf_class_block)
-    DW_AT(priority,               0x45, dwarf_class_ref)
-    DW_AT(segment,                0x46, dwarf_class_block|dwarf_class_const)
-    DW_AT(specification,          0x47, dwarf_class_ref)
-    DW_AT(static_link,            0x48, dwarf_class_block|dwarf_class_const)
-    DW_AT(type,                   0x49, dwarf_class_ref)
-    DW_AT(use_location,           0x4a, dwarf_class_block|dwarf_class_const)
-    DW_AT(variable_parameter,     0x4b, dwarf_class_flag)
-    DW_AT(virtuality,             0x4c, dwarf_class_const)
-    DW_AT(vtable_elem_location,   0x4d, dwarf_class_block|dwarf_class_ref)
-    DW_AT(allocated,              0x4e, dwarf_class_block|dwarf_class_const|dwarf_class_ref)
-    DW_AT(associated,             0x4f, dwarf_class_block|dwarf_class_const|dwarf_class_ref)
-    DW_AT(data_location,          0x50, dwarf_class_block)
-    DW_AT(byte_stride,            0x51, dwarf_class_block|dwarf_class_const|dwarf_class_ref)
-    DW_AT(entry_pc,               0x52, dwarf_class_addr)
-    DW_AT(use_UTF8,               0x53, dwarf_class_flag)
-    DW_AT(extension,              0x54, dwarf_class_ref)
-    DW_AT(ranges,                 0x55, 0) /* rangelistptr */
-    DW_AT(trampoline,             0x56, dwarf_class_addr|dwarf_class_flag|dwarf_class_ref|dwarf_class_str)
-    DW_AT(call_column,            0x57, dwarf_class_const)
-    DW_AT(call_file,              0x58, dwarf_class_const)
-    DW_AT(call_line,              0x59, dwarf_class_const)
-    DW_AT(description,            0x5a, dwarf_class_str)
-    DW_AT(binary_scale,           0x5b, dwarf_class_const)
-    DW_AT(decimal_scale,          0x5c, dwarf_class_const)
-    DW_AT(small,                  0x5d, dwarf_class_ref)
-    DW_AT(decimal_sign,           0x5e, dwarf_class_const)
-    DW_AT(digit_count,            0x5f, dwarf_class_const)
-    DW_AT(picture_string,         0x60, dwarf_class_str)
-    DW_AT(mutable,                0x61, dwarf_class_flag)
-    DW_AT(threads_scaled,         0x62, dwarf_class_flag)
-    DW_AT(explicit,               0x63, dwarf_class_flag)
-    DW_AT(object_pointer,         0x64, dwarf_class_ref)
-    DW_AT(endianity,              0x65, dwarf_class_const)
-    DW_AT(elemental,              0x66, dwarf_class_flag)
-    DW_AT(pure,                   0x67, dwarf_class_flag)
-    DW_AT(recursive,              0x68, dwarf_class_flag)
-};
-#undef DW_AT
 
 
-static const char *
-desc_dwarf_class_addr(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_addr(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) buf;
-    (void) dstr;
+    (void) o;
+    struct dwarf_obj ret;
+
+    ret.class = dwarf_class_addr;
 
     if (word_size == 4)
-        snprintf(buf, BUFSIZ, "0x%x", *(uint32_t *)die);
+        ret.un.addr = *(uint32_t *)die;
     else if (word_size == 8)
-        snprintf(buf, BUFSIZ, "0x%lx", *(uint64_t *)die);
+        ret.un.addr = *(uint64_t *)die;
     else
-        error("Unknown word size");
+        error("Unknown word size %d\n", word_size);
 
     *len = word_size;
-    return buf;
+    return ret;
 }
 
-static const char *
-desc_dwarf_class_str(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_str(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) buf;
-    (void) dstr;
-
+    (void) o;
     *len = strlen((char *)die) + 1;
-    return (char *)die;
+    return (struct dwarf_obj) {
+        .class  = dwarf_class_str,
+        .un.str = (char *)die,
+    };
 }
 
-static const char *
-desc_dwarf_class_strp(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_strp(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) buf;
+    struct sect dstr = obj_get_sect_by_name(o, ".debug_str");
     uint32_t off = *(uint32_t *)die;
 
     *len = 4;
-    return (char *)dstr + off;
+
+    return (struct dwarf_obj) {
+        .class  = dwarf_class_str,
+        .un.str = (char *)(dstr.buf + off),
+    };
 }
 
-static const char *
-desc_dwarf_class_data1(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_data1(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) dstr;
-
-    snprintf(buf, BUFSIZ, "%d", *(uint8_t *)die);
+    (void) o;
     *len = 1;
-
-    return buf;
+    return (struct dwarf_obj) {
+        .class     = dwarf_class_const,
+        .un.const_ = *(uint8_t *)die,
+    };
 }
 
-static const char *
-desc_dwarf_class_data2(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_data2(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) dstr;
-
-    snprintf(buf, BUFSIZ, "%d", *(uint16_t *)die);
+    (void) o;
     *len = 2;
-
-    return buf;
+    return (struct dwarf_obj) {
+        .class     = dwarf_class_const,
+        .un.const_ = *(uint16_t *)die,
+    };
 }
 
-static const char *
-desc_dwarf_class_data4(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_data4(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) dstr;
-
-    snprintf(buf, BUFSIZ, "%d", *(uint32_t *)die);
+    (void) o;
     *len = 4;
-
-    return buf;
+    return (struct dwarf_obj) {
+        .class     = dwarf_class_const,
+        .un.const_ = *(uint32_t *)die,
+    };
 }
 
-static const char *
-desc_dwarf_class_data8(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_data8(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) dstr;
-
-    snprintf(buf, BUFSIZ, "%ld", *(uint64_t *)die);
+    (void) o;
     *len = 8;
-
-    return buf;
+    return (struct dwarf_obj) {
+        .class     = dwarf_class_const,
+        .un.const_ = *(uint64_t *)die,
+    };
 }
 
-static const char *
-desc_dwarf_class_udata(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_udata(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) dstr;
-
+    (void) o;
     *len = leb_len(die);
-    snprintf(buf, BUFSIZ, "%ld", uleb_decode(die));
-
-    return buf;
+    return (struct dwarf_obj) {
+        .class     = dwarf_class_const,
+        .un.const_ = uleb_decode(die),
+    };
 }
 
-static const char *
-desc_dwarf_class_sdata(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_sdata(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) dstr;
-
+    (void) o;
     *len = leb_len(die);
-    snprintf(buf, BUFSIZ, "%ld", sleb_decode(die));
-
-    return buf;
+    return (struct dwarf_obj) {
+        .class     = dwarf_class_const,
+        .un.const_ = sleb_decode(die),
+    };
 }
 
-static const char *
-desc_dwarf_class_ref1(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_ref1(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) dstr;
-
-    snprintf(buf, BUFSIZ, "<0x%x>", *(uint8_t *)die);
+    (void) o;
     *len = 1;
-
-    return buf;
+    return (struct dwarf_obj) {
+        .class  = dwarf_class_ref,
+        .un.ref = *(uint8_t *)die,
+    };
 }
 
-static const char *
-desc_dwarf_class_ref2(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_ref2(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) dstr;
-
-    snprintf(buf, BUFSIZ, "<0x%x>", *(uint16_t *)die);
+    (void) o;
     *len = 2;
-
-    return buf;
+    return (struct dwarf_obj) {
+        .class  = dwarf_class_ref,
+        .un.ref = *(uint16_t *)die,
+    };
 }
 
-static const char *
-desc_dwarf_class_ref4(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_ref4(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) dstr;
-
-    snprintf(buf, BUFSIZ, "<0x%x>", *(uint32_t *)die);
+    (void) o;
     *len = 4;
-
-    return buf;
+    return (struct dwarf_obj) {
+        .class  = dwarf_class_ref,
+        .un.ref = *(uint32_t *)die,
+    };
 }
 
-static const char *
-desc_dwarf_class_ref8(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_ref8(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) dstr;
-
-    snprintf(buf, BUFSIZ, "<0x%lx>", *(uint64_t *)die);
+    (void) o;
     *len = 8;
-
-    return buf;
+    return (struct dwarf_obj) {
+        .class  = dwarf_class_ref,
+        .un.ref = *(uint64_t *)die,
+    };
 }
 
-static const char *
-desc_dwarf_class_block1(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_block1(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) dstr;
-
-    snprintf(buf, BUFSIZ, "block of size %d", *(uint8_t *)die);
-    *len = 1 + *(uint8_t *)die;
-
-    return buf;
+    (void) o;
+    *len = 8;
+    return (struct dwarf_obj) {
+        .class  = dwarf_class_block,
+        .un.block = {
+            .len = *(uint8_t *) die,
+            .ptr = die + 1,
+        },
+    };
 }
 
-static const char *
-desc_dwarf_class_flag(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len)
+static struct dwarf_obj
+obj_dwarf_class_flag(uint8_t *die, struct obj *o, size_t *len)
 {
-    (void) dstr;
-
-    snprintf(buf, BUFSIZ, "%d", *(uint8_t *)die);
+    (void) o;
     *len = 1;
-
-    return buf;
+    return (struct dwarf_obj) {
+        .class   = dwarf_class_flag,
+        .un.flag = *(uint8_t *)die,
+    };
 }
 
 
-#define DW_FORM(str_, form_, desc_, class_) \
-    {                                       \
+#define DW_FORM(str_, form_, obj_, class_)  \
+    [form_] = {                             \
         .str = STRINGIFY(str_),             \
         .form = form_,                      \
         .class = class_,                    \
-        .desc = desc_,                      \
+        .obj = obj_,                        \
     },
 struct dwarf_form {
     char *str;
     uintmax_t form;
     enum dwarf_class class;
-    const char *(*desc)(uint8_t *die, uint8_t *dstr, char buf[BUFSIZ], size_t *len);
+    struct dwarf_obj (*obj)(uint8_t *die, struct obj *o, size_t *len);
 } forms[] = {
-    DW_FORM(addr,        0x01, desc_dwarf_class_addr, dwarf_class_addr)
+    DW_FORM(addr,        0x01, obj_dwarf_class_addr, dwarf_class_addr)
     DW_FORM(block2,      0x03, NULL, dwarf_class_block)
     DW_FORM(block4,      0x04, NULL, dwarf_class_block)
-    DW_FORM(data2,       0x05, desc_dwarf_class_data2, dwarf_class_const)
-    DW_FORM(data4,       0x06, desc_dwarf_class_data4, dwarf_class_const)
-    DW_FORM(data8,       0x07, desc_dwarf_class_data8, dwarf_class_const)
-    DW_FORM(string,      0x08, desc_dwarf_class_str, dwarf_class_str)
+    DW_FORM(data2,       0x05, obj_dwarf_class_data2, dwarf_class_const)
+    DW_FORM(data4,       0x06, obj_dwarf_class_data4, dwarf_class_const)
+    DW_FORM(data8,       0x07, obj_dwarf_class_data8, dwarf_class_const)
+    DW_FORM(string,      0x08, obj_dwarf_class_str, dwarf_class_str)
     DW_FORM(block,       0x09, NULL, dwarf_class_block)
-    DW_FORM(block1,      0x0a, desc_dwarf_class_block1, dwarf_class_block)
-    DW_FORM(data1,       0x0b, desc_dwarf_class_data1, dwarf_class_const)
-    DW_FORM(flag,        0x0c, desc_dwarf_class_flag, dwarf_class_flag)
-    DW_FORM(sdata,       0x0d, desc_dwarf_class_sdata, dwarf_class_const)
-    DW_FORM(strp,        0x0e, desc_dwarf_class_strp, dwarf_class_str)
-    DW_FORM(udata,       0x0f, desc_dwarf_class_udata, dwarf_class_const)
+    DW_FORM(block1,      0x0a, obj_dwarf_class_block1, dwarf_class_block)
+    DW_FORM(data1,       0x0b, obj_dwarf_class_data1, dwarf_class_const)
+    DW_FORM(flag,        0x0c, obj_dwarf_class_flag, dwarf_class_flag)
+    DW_FORM(sdata,       0x0d, obj_dwarf_class_sdata, dwarf_class_const)
+    DW_FORM(strp,        0x0e, obj_dwarf_class_strp, dwarf_class_str)
+    DW_FORM(udata,       0x0f, obj_dwarf_class_udata, dwarf_class_const)
     DW_FORM(ref_addr,    0x10, NULL, dwarf_class_ref)
-    DW_FORM(ref1,        0x11, desc_dwarf_class_ref1, dwarf_class_ref)
-    DW_FORM(ref2,        0x12, desc_dwarf_class_ref2, dwarf_class_ref)
-    DW_FORM(ref4,        0x13, desc_dwarf_class_ref4, dwarf_class_ref)
-    DW_FORM(ref8,        0x14, desc_dwarf_class_ref8, dwarf_class_ref)
+    DW_FORM(ref1,        0x11, obj_dwarf_class_ref1, dwarf_class_ref)
+    DW_FORM(ref2,        0x12, obj_dwarf_class_ref2, dwarf_class_ref)
+    DW_FORM(ref4,        0x13, obj_dwarf_class_ref4, dwarf_class_ref)
+    DW_FORM(ref8,        0x14, obj_dwarf_class_ref8, dwarf_class_ref)
     DW_FORM(ref_udata,   0x15, NULL, dwarf_class_ref)
     DW_FORM(indirect,    0x16, NULL, 0)
 };
@@ -485,9 +353,25 @@ dwarf_abbrevtbl_decode(uint8_t *buf, size_t *len)
     };
 }
 
-struct dwarf_cu
-dwarf_cu_decode(uint8_t *buf)
+static struct dwarf_abbrev *
+abbrev_lookup(struct dwarf_abbrev *atbl, uintmax_t id)
 {
+    if (atbl->id == id)
+        return atbl;
+
+    for (unsigned i = 0; i < vector_nmemb(&atbl->children); i++) {
+        struct dwarf_abbrev *ret = abbrev_lookup(atbl->children + i, id);
+        if (ret)
+            return ret;
+    }
+
+    return NULL;
+}
+
+struct dwarf_cu
+dwarf_cu_decode(uint8_t *buf, struct obj *o)
+{
+    struct sect dabbrev = obj_get_sect_by_name(o, ".debug_abbrev");
     struct dwarf_cu ret;
 
     BUF_READ(buf, ret.cu_len, uint32_t);
@@ -511,21 +395,62 @@ dwarf_cu_decode(uint8_t *buf)
     }
 
     BUF_READ(buf, ret.word_sz, uint8_t);
+    word_size = ret.word_sz;
+
     ret.dies_len -= sizeof(uint8_t);
-    ret.dies = buf;
+    ret.dies = NULL;
+
+    size_t _;
+    struct dwarf_abbrev atbl = dwarf_abbrevtbl_decode(dabbrev.buf + ret.abbrev_off, &_);
+    uint8_t *die = buf;
+    size_t die_len = ret.dies_len;
+
+    while (die_len > 0) {
+        struct dwarf_abbrev *abbrev = abbrev_lookup(&atbl, uleb_decode(die));
+
+        die_len -= leb_len(die);
+        die += leb_len(die);
+
+        if (!abbrev)
+            continue;
+
+        vector_decl(struct dwarf_attr, attrs);
+
+        vector_foreach(a, &abbrev->attrs) {
+            size_t len;
+
+            if (forms[a.form].obj == NULL)
+                todo();
+            a.val = forms[a.form].obj(die, o, &len);
+            vector_push(&attrs, a);
+
+            die_len -= len;
+            die     += len;
+        }
+        struct dwarf_die die = {
+            .tag = abbrev->tag,
+            .attrs = attrs,
+        };
+        vector_push(&ret.dies, die);
+    }
 
     return ret;
 }
 
 vector_of(struct dwarf_cu)
-dwarf_cus_decode(struct sect *dinfo)
+dwarf_cus_decode(struct obj *o)
 {
+    struct sect dinfo   = obj_get_sect_by_name(o, ".debug_info");
     vector_decl(struct dwarf_cu, ret);
-    uint8_t *buf = dinfo->buf;
-    int remain   = dinfo->size;
+
+    if (!dinfo.name)
+        return ret;
+
+    uint8_t *buf = dinfo.buf;
+    int remain   = dinfo.size;
 
     while (remain > 0) {
-        struct dwarf_cu v = dwarf_cu_decode(buf);
+        struct dwarf_cu v = dwarf_cu_decode(buf, o);
 
         remain -= v.cu_len;
         buf    += v.cu_len;
@@ -638,45 +563,45 @@ op_ext(struct dwarf_machine *m, uint8_t *buf, size_t *size)
     }
 }
 
-void
-dwarf_line_decode(struct sect *dline)
+struct line line_err = { NULL, -1 };
+
+struct line
+addr2line(struct sect dline, struct dwarf_cu *cu)
 {
-    struct opcode {
-        char *type;
-        char *name;
-        void (*handler)(struct dwarf_machine *, uint8_t *, size_t *);
-    };
+    char *name = NULL;
+    char *cdir = NULL;
 
+    vector_foreach(die, &cu->dies) {
+        if (die.tag != DW_TAG_compile_unit)
+            continue;
 
-    struct opcode ops[] = {
-        [0x00] = { "extended", "extended", op_ext },
-    };
+        vector_foreach(at, &die.attrs) {
+            if (at.name == DW_AT_name)
+                name = at.val.un.str;
+            else if (at.name == DW_AT_comp_dir)
+                cdir = at.val.un.str;
+        }
+    }
 
+    if (!name || !cdir)
+        return line_err;
+
+    printf("cdir = %s name = %s\n", cdir, name);
 
     size_t len;
-    struct dwarf_prol prol = line_header_decode(dline->buf, &len);
-    uint8_t *buf = dline->buf + len;
+    struct dwarf_prol prol = line_header_decode(dline.buf, &len);
+    uint8_t *buf = dline.buf + len;
+    ssize_t rem  = dline.size - len;
     struct dwarf_machine m = {
-        .addr    = 0,
-        .file    = 1,
-        .line    = 1,
+        .addr = 0,
+        .file = 1,
+        .line = 1,
     };
-    ssize_t rem = dline->size - len;
 
     printf("off       = 0x%lx\n", len);
     printf("len       = %ld\n", prol.unit_len);
     printf("op_base   = 0x%x\n", prol.op_base);
     printf("line_base = %d\n", prol.line_base);
-    printf("\n");
-
-    for (int i = 0; i < 32;) {
-        printf("%02x ", buf[i]);
-        i++;
-        if (i % 4 == 0)
-            printf("\n");
-        if (i % 16 == 0)
-            printf("\n");
-    }
     printf("\n");
 
     size_t buf_backup = (size_t)buf;
@@ -698,20 +623,26 @@ dwarf_line_decode(struct sect *dline)
         buf += sz;
         rem -= sz;
     }
+
+    return line_err;
 }
 
-const char *
-dwarf_describe_attrib(uint8_t *die, struct dwarf_attr attr, uint8_t *dstr, size_t *len)
+struct line
+dwarf_addr2line(struct obj *o, size_t addr)
 {
-    static char buf[BUFSIZ] = "";
-    const struct dwarf_form *f = dwarf_form_struct_lookup(attr.form);
+    vector_of(struct dwarf_cu) cus = dwarf_cus_decode(o);
+    struct sect dline = obj_get_sect_by_name(o, ".debug_line");
+    (void) addr;
 
-    *len = 0;
+    if (!dline.name)
+        return line_err;
 
-    if (f->desc)
-        return f->desc(die, dstr, buf, len);
-    printf("Todo %s\n", f->str);
-    todo();
-    return NULL;
+    vector_foreach(cu, &cus) {
+        struct line ln = addr2line(dline, &cu);
+        if (ln.fn != NULL)
+            return ln;
+    }
+
+    return line_err;
 }
 

@@ -8,14 +8,38 @@
 #include "vector.h"
 
 
+enum dwarf_class {
+    dwarf_class_ref   = 1 << 0,
+    dwarf_class_block = 1 << 1,
+    dwarf_class_const = 1 << 2,
+    dwarf_class_str   = 1 << 3,
+    dwarf_class_addr  = 1 << 4,
+    dwarf_class_flag  = 1 << 5,
+};
+
+struct dwarf_obj {
+    enum dwarf_class class;
+    union {
+        uintmax_t ref;
+        struct {
+            uint32_t len;
+            uint8_t *ptr;
+        } block;
+        uintmax_t const_;
+        char *str;
+        uint64_t addr;
+        bool flag;
+    } un;
+};
+
 struct dwarf_attr {
     uintmax_t name;
     uintmax_t form;
-    uint8_t  *addr;
+    struct dwarf_obj val;
 };
 
 struct dwarf_die {
-    uintmax_t abbrev_idx;
+    uintmax_t tag;
     vector_of(struct dwarf_attr) attrs;
 };
 
@@ -25,8 +49,9 @@ struct dwarf_cu {
     uint16_t ver;
     uint64_t abbrev_off;
     uint8_t word_sz;
-    uint8_t *dies;
     bool is_64;
+
+    vector_of(struct dwarf_die) dies;
 };
 
 struct dwarf_abbrev {
@@ -65,23 +90,21 @@ struct dwarf_machine {
     unsigned line;
 };
 
-enum dwarf_class {
-    dwarf_class_ref   = 1 << 0,
-    dwarf_class_block = 1 << 1,
-    dwarf_class_const = 1 << 2,
-    dwarf_class_str   = 1 << 3,
-    dwarf_class_addr  = 1 << 4,
-    dwarf_class_flag  = 1 << 5,
+struct line {
+    vector_of(char) fn;
+    int nu;
 };
 
 extern int word_size;
 
 
-void dwarf_line_decode(struct sect *dline);
-struct dwarf_cu dwarf_cu_decode(uint8_t *buf);
+struct line dwarf_addr2line(struct obj *o, size_t addr);
+size_t dwarf_line2addr(struct obj *o, struct line *ln);
+
+struct dwarf_cu dwarf_cu_decode(uint8_t *buf, struct obj *o);
 struct dwarf_abbrev dwarf_abbrevtbl_decode(uint8_t *buf, size_t *len);
 
-vector_of(struct dwarf_cu) dwarf_cus_decode(struct sect *dinfo);
+vector_of(struct dwarf_cu) dwarf_cus_decode(struct obj *o);
 
 const char *dwarf_tag_lookup(uintmax_t tag);
 const char *dwarf_attrib_lookup(uintmax_t nm);
