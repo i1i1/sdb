@@ -18,13 +18,23 @@ int word_size;
 
 
 void op_ext(struct dwarf_machine *m, uint8_t *buf, size_t *size);
+void op_advance_pc(struct dwarf_machine *m, uint8_t *buf, size_t *size);
+void op_set_column(struct dwarf_machine *m, uint8_t *buf, size_t *size);
+void op_negate_stmt(struct dwarf_machine *m, uint8_t *buf, size_t *size);
+void op_const_add_pc(struct dwarf_machine *m, uint8_t *buf, size_t *size);
+void op_fixed_advance_pc(struct dwarf_machine *m, uint8_t *buf, size_t *size);
 
 struct opcode {
     char *type;
     char *name;
     void (*handler)(struct dwarf_machine *, uint8_t *, size_t *);
 } ops[] = {
-    [0x00] = { "extended", "extended", op_ext },
+    [0x00] = { "extended", "extended",         op_ext              },
+    [0x02] = { "standart", "advance_pc",       op_advance_pc       },
+    [0x05] = { "standart", "set_column",       op_set_column       },
+    [0x06] = { "standart", "negate_stmt",      op_negate_stmt      },
+    [0x08] = { "standart", "const_add_pc",     op_const_add_pc     },
+    [0x09] = { "standart", "fixed_advance_pc", op_fixed_advance_pc },
 };
 
 
@@ -479,7 +489,7 @@ line_header_decode(uint8_t *buf, size_t *len)
     else
         BUF_READ(buf, ret.header_len, uint32_t);
 
-    BUF_READ(buf, ret.inst_len,    uint8_t);
+    BUF_READ(buf, ret.min_inst_len,    uint8_t);
     BUF_READ(buf, ret.def_is_stmt, uint8_t);
     BUF_READ(buf, ret.line_base,   int8_t);
     BUF_READ(buf, ret.line_range,  uint8_t);
@@ -521,6 +531,18 @@ line_header_decode(uint8_t *buf, size_t *len)
 }
 
 void
+op_const_add_pc(struct dwarf_machine *m, uint8_t *buf, size_t *size)
+{
+    (void) buf;
+    uint8_t op = 255;
+    int adj_op = op - m->prol->op_base;
+    int addr_inc = (adj_op / m->prol->line_range) * m->prol->min_inst_len;
+
+    m->addr += addr_inc * m->prol->min_inst_len;
+    *size = 0;
+}
+
+void
 op_ext(struct dwarf_machine *m, uint8_t *buf, size_t *size)
 {
     enum DW_LNE {
@@ -537,9 +559,10 @@ op_ext(struct dwarf_machine *m, uint8_t *buf, size_t *size)
     switch (*buf++) {
     case end_sequence:
         *m = (struct dwarf_machine) {
-            .addr = 0,
-            .file = 1,
-            .line = 1,
+            .addr   = 0,
+            .file   = 1,
+            .line   = 1,
+            .op_idx = 0,
         };
         break;
     case set_address:
@@ -563,10 +586,53 @@ op_ext(struct dwarf_machine *m, uint8_t *buf, size_t *size)
     }
 }
 
+void
+op_set_column(struct dwarf_machine *m, uint8_t *buf, size_t *size)
+{
+    (void) m;
+    *size = leb_len(buf);
+    /*
+     * Do nothing. Skipping 1 argument.
+     */
+}
+
+void
+op_advance_pc(struct dwarf_machine *m, uint8_t *buf, size_t *size)
+{
+    *size = leb_len(buf);
+    m->addr += uleb_decode(buf);
+}
+
+void
+op_fixed_advance_pc(struct dwarf_machine *m, uint8_t *buf, size_t *size)
+{
+    *size = 2;
+    m->addr += *(uint16_t *)buf;
+}
+
+void
+op_negate_stmt(struct dwarf_machine *m, uint8_t *buf, size_t *size)
+{
+    (void) m;
+    (void) buf;
+    *size = 0;
+}
+
+void
+op_special(struct dwarf_machine *m, uint8_t op)
+{
+    int adj_op = op - m->prol->op_base;
+    int addr_inc = (adj_op / m->prol->line_range) * m->prol->min_inst_len;
+    int line_inc = m->prol->line_base + (adj_op % m->prol->line_range);
+
+    m->addr += addr_inc;
+    m->line += line_inc;
+}
+
 struct line line_err = { NULL, -1 };
 
 struct line
-addr2line(struct sect dline, struct dwarf_cu *cu)
+addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
 {
     char *name = NULL;
     char *cdir = NULL;
@@ -593,9 +659,11 @@ addr2line(struct sect dline, struct dwarf_cu *cu)
     uint8_t *buf = dline.buf + len;
     ssize_t rem  = dline.size - len;
     struct dwarf_machine m = {
-        .addr = 0,
-        .file = 1,
-        .line = 1,
+        .addr   = 0,
+        .file   = 1,
+        .line   = 1,
+        .op_idx = 0,
+        .prol   = &prol,
     };
 
     printf("off       = 0x%lx\n", len);
@@ -607,19 +675,27 @@ addr2line(struct sect dline, struct dwarf_cu *cu)
     size_t buf_backup = (size_t)buf;
 
     while (rem > 0) {
-        struct opcode *op = ops + buf[0];
+        size_t idx = buf[0];
+        struct opcode *op = &ops[idx];
         size_t sz;
+        struct dwarf_machine new = m;
 
-        if (ARRAY_SIZE(ops) <= buf[0] || op->name == NULL)
+        if (idx < prol.op_base && op->name == NULL)
             error("todo op - 0x%x\n", buf[0]);
 
-        buf++;
-        op->handler(&m, buf, &sz);
+        if (idx < prol.op_base) {
+            op->handler(&new, buf + 1, &sz);
+        } else {
+            op_special(&new, idx);
+            sz = 0;
+        }
+
         sz++;
-        printf(" [0x%04lx] %s opcode `%s'; length is - 0x%02lx, next is [0x%04lx]\n",
-           (size_t)(len + buf-buf_backup-1),
-           op->type, op->name, sz,
-           (size_t)(len + buf-buf_backup-1 + sz));
+
+        if (m.addr <= addr && addr < new.addr)
+            return (struct line) { .fn = name, m.line };
+
+        m = new;
         buf += sz;
         rem -= sz;
     }
@@ -632,13 +708,12 @@ dwarf_addr2line(struct obj *o, size_t addr)
 {
     vector_of(struct dwarf_cu) cus = dwarf_cus_decode(o);
     struct sect dline = obj_get_sect_by_name(o, ".debug_line");
-    (void) addr;
 
     if (!dline.name)
         return line_err;
 
     vector_foreach(cu, &cus) {
-        struct line ln = addr2line(dline, &cu);
+        struct line ln = addr2line(addr, dline, &cu);
         if (ln.fn != NULL)
             return ln;
     }

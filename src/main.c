@@ -107,7 +107,6 @@ test_dwarf(const char *fn)
         struct line ln = dwarf_addr2line(o, addr);
 
         printf("\t%s:%d\n", ln.fn, ln.nu);
-        vector_free(&ln.fn);
         free(buf);
     }
 

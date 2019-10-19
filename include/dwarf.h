@@ -72,7 +72,7 @@ struct dwarf_prol {
     uint64_t unit_len;
     uint16_t ver;
     uint64_t header_len;
-    uint8_t  inst_len;
+    uint8_t  min_inst_len;
     uint8_t  def_is_stmt;
     int8_t   line_base;
     uint8_t  line_range;
@@ -85,9 +85,11 @@ struct dwarf_prol {
 };
 
 struct dwarf_machine {
+    struct dwarf_prol *prol;
     uint64_t addr;
-    unsigned file;
-    unsigned line;
+    int file;
+    int line;
+    int op_idx;
 };
 
 struct line {
