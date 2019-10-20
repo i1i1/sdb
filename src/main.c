@@ -76,12 +76,16 @@ test_dwarf(const char *fn)
     if ((o = obj_init(fn)) == NULL)
         error("Not an object\n");
 
+    vector_of(struct dwarf_cu) cus = dwarf_cus_decode(o);
+
     for (;;) {
         char *buf;
         size_t len;
 
         printf(">> ");
-        getline(&buf, &len, stdin);
+
+        if (getline(&buf, &len, stdin) == -1)
+            break;
 
         if (STREQ(buf, "end\n"))
             break;
@@ -101,16 +105,16 @@ test_dwarf(const char *fn)
 
         if (buf[i] != '\n') {
             printf("Error!\n");
-            free(buf);
+            continue;
         }
 
-        struct line ln = dwarf_addr2line(o, addr);
+        struct line ln = dwarf_addr2line(o, cus, addr);
 
         printf("\t%s:%d\n", ln.fn, ln.nu);
-        free(buf);
     }
 
     printf("File size = %ld\n", o->sz);
+    dwarf_cus_free(cus);
     obj_deinit(o);
 }
 

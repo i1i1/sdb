@@ -378,6 +378,16 @@ abbrev_lookup(struct dwarf_abbrev *atbl, uintmax_t id)
     return NULL;
 }
 
+void
+dwarf_abbrevtbl_free(struct dwarf_abbrev *atbl)
+{
+    vector_foreach(a, &atbl->children) {
+        dwarf_abbrevtbl_free(&a);
+    }
+    vector_free(&atbl->children);
+    vector_free(&atbl->attrs);
+}
+
 struct dwarf_cu
 dwarf_cu_decode(uint8_t *buf, struct obj *o)
 {
@@ -429,8 +439,11 @@ dwarf_cu_decode(uint8_t *buf, struct obj *o)
         vector_foreach(a, &abbrev->attrs) {
             size_t len;
 
-            if (forms[a.form].obj == NULL)
+            if (forms[a.form].obj == NULL) {
+                printf("Form todo %02lx\n", a.form);
                 todo();
+            }
+
             a.val = forms[a.form].obj(die, o, &len);
             vector_push(&attrs, a);
 
@@ -443,6 +456,8 @@ dwarf_cu_decode(uint8_t *buf, struct obj *o)
         };
         vector_push(&ret.dies, die);
     }
+
+    dwarf_abbrevtbl_free(&atbl);
 
     return ret;
 }
@@ -579,6 +594,7 @@ op_ext(struct dwarf_machine *m, uint8_t *buf, size_t *size)
 
         break;
     case define_file:
+        printf("todo define file\n");
         todo();
         break;
     default:
@@ -629,6 +645,15 @@ op_special(struct dwarf_machine *m, uint8_t op)
     m->line += line_inc;
 }
 
+
+void
+dwarf_prol_free(struct dwarf_prol *p)
+{
+    vector_free(&p->std_op_lens);
+    vector_free(&p->inc_dirs);
+    vector_free(&p->fnames);
+}
+
 struct line line_err = { NULL, -1 };
 
 struct line
@@ -672,8 +697,6 @@ addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
     printf("line_base = %d\n", prol.line_base);
     printf("\n");
 
-    size_t buf_backup = (size_t)buf;
-
     while (rem > 0) {
         size_t idx = buf[0];
         struct opcode *op = &ops[idx];
@@ -692,21 +715,24 @@ addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
 
         sz++;
 
-        if (m.addr <= addr && addr < new.addr)
+        if (m.addr <= addr && addr < new.addr) {
+            dwarf_prol_free(&prol);
             return (struct line) { .fn = name, m.line };
+        }
 
         m = new;
         buf += sz;
         rem -= sz;
     }
 
+    dwarf_prol_free(&prol);
+
     return line_err;
 }
 
 struct line
-dwarf_addr2line(struct obj *o, size_t addr)
+dwarf_addr2line(struct obj *o, vector_of(struct dwarf_cu) cus, size_t addr)
 {
-    vector_of(struct dwarf_cu) cus = dwarf_cus_decode(o);
     struct sect dline = obj_get_sect_by_name(o, ".debug_line");
 
     if (!dline.name)
@@ -719,5 +745,17 @@ dwarf_addr2line(struct obj *o, size_t addr)
     }
 
     return line_err;
+}
+
+void
+dwarf_cus_free(vector_of(struct dwarf_cu) cus)
+{
+    vector_foreach(cu, &cus) {
+        vector_foreach(die, &cu.dies) {
+            vector_free(&die.attrs);
+        }
+        vector_free(&cu.dies);
+    }
+    vector_free(&cus);
 }
 

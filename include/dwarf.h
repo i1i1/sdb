@@ -100,13 +100,14 @@ struct line {
 extern int word_size;
 
 
-struct line dwarf_addr2line(struct obj *o, size_t addr);
-size_t dwarf_line2addr(struct obj *o, struct line *ln);
+struct line dwarf_addr2line(struct obj *o, vector_of(struct dwarf_cu) cus, size_t addr);
+size_t dwarf_line2addr(struct obj *o, vector_of(struct dwarf_cu) cus, struct line *ln);
 
 struct dwarf_cu dwarf_cu_decode(uint8_t *buf, struct obj *o);
 struct dwarf_abbrev dwarf_abbrevtbl_decode(uint8_t *buf, size_t *len);
 
 vector_of(struct dwarf_cu) dwarf_cus_decode(struct obj *o);
+void dwarf_cus_free(vector_of(struct dwarf_cu) cus);
 
 const char *dwarf_tag_lookup(uintmax_t tag);
 const char *dwarf_attrib_lookup(uintmax_t nm);
