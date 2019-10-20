@@ -84,8 +84,13 @@ test_dwarf(const char *fn)
 
         printf(">> ");
 
-        if (getline(&buf, &len, stdin) == -1)
+        buf = NULL;
+        len = 0;
+
+        if (getline(&buf, &len, stdin) == -1) {
+            free(buf);
             break;
+        }
 
         if (STREQ(buf, "end\n"))
             break;
@@ -105,12 +110,15 @@ test_dwarf(const char *fn)
 
         if (buf[i] != '\n') {
             printf("Error!\n");
+            free(buf);
             continue;
         }
 
         struct line ln = dwarf_addr2line(o, cus, addr);
 
-        printf("\t%s:%d\n", ln.fn, ln.nu);
+        printf("\t%s:%d\n", ln.file, ln.nu);
+
+        free(buf);
     }
 
     printf("File size = %ld\n", o->sz);

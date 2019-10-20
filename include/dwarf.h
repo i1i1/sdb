@@ -93,7 +93,8 @@ struct dwarf_machine {
 };
 
 struct line {
-    vector_of(char) fn;
+    char *dir;
+    char *file;
     int nu;
 };
 
