@@ -6,10 +6,13 @@
 int
 main(void)
 {
-	printf("[%d] hello, world\n", getpid());
-	fflush(stdout);
-	printf("[%d] current user ID is %d\n", getpid(), getuid());
+    extern char _start[];
 
-	return 0;
+    printf("main %p start %p\n", main, _start);
+//    printf("[%d] hello, world\n", getpid());
+//    fflush(stdout);
+//    printf("[%d] current user ID is %d\n", getpid(), getuid());
+
+    return 0;
 }
 

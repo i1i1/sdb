@@ -40,7 +40,6 @@ ptrace_traceme() {
     ret = ptrace(PTRACE_TRACEME, 0, NULL, NULL);
     if (ret != 0)
         error("TRACEME error");
-    kill(getpid(), SIGSTOP);
 }
 
 pid_t
@@ -62,8 +61,7 @@ start_debugee(const char **argv)
         break;
     }
 
-    waitpid(pid, &st, WSTOPPED);
-    ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACESYSGOOD);
+    wait(&st);
 
     return pid;
 }
@@ -72,6 +70,7 @@ void
 test_dwarf(const char *fn)
 {
     struct obj *o;
+    vector_decl(char, dir);
 
     if ((o = obj_init(fn)) == NULL)
         error("Not an object\n");
@@ -95,28 +94,52 @@ test_dwarf(const char *fn)
         if (STREQ(buf, "end\n"))
             break;
 
-        size_t addr = 0;
-        int i;
+        switch (buf[0]) {
+        case 'a': {
+            size_t addr = 0;
+            int i;
 
-        for (i = 0; buf[i] && isxdigit(buf[i]); i++) {
-            addr *= 16;
-            if ('0' <= buf[i] && buf[i] <= '9')
-                addr += buf[i] - '0';
-            else if ('A' <= buf[i] && buf[i] <= 'F')
-                addr += buf[i] - 'A' + 10;
-            else// if ('a' <= buf[i] && buf[i] <= 'f')
-                addr += buf[i] - 'a' + 10;
+            for (i = 2; buf[i] && isxdigit(buf[i]); i++) {
+                addr *= 16;
+                if ('0' <= buf[i] && buf[i] <= '9')
+                    addr += buf[i] - '0';
+                else if ('A' <= buf[i] && buf[i] <= 'F')
+                    addr += buf[i] - 'A' + 10;
+                else// if ('a' <= buf[i] && buf[i] <= 'f')
+                    addr += buf[i] - 'a' + 10;
+            }
+
+            struct line ln = dwarf_addr2line(o, cus, addr);
+
+            printf("\t%s/%s:%d\n", ln.dir, ln.file, ln.nu);
+            break;
         }
+        case 'd':
+            vector_free(&dir);
+            for (int i = 2; buf[i] != '\n'; i++)
+                vector_push(&dir, buf[i]);
+            vector_push(&dir, '\0');
+            break;
+        case 'l': {
+            int i;
+            vector_decl(char, file);
 
-        if (buf[i] != '\n') {
-            printf("Error!\n");
-            free(buf);
-            continue;
+            for (i = 2; buf[i] != ':'; i++)
+                vector_push(&file, buf[i]);
+            vector_push(&file, '\0');
+
+            struct line ln = {
+                .dir  = dir,
+                .file = file,
+                .nu   = atoi(buf + i + 1),
+            };
+
+            printf("\tpc = %p\n", (void *)dwarf_line2addr(o, cus, &ln));
+            break;
         }
-
-        struct line ln = dwarf_addr2line(o, cus, addr);
-
-        printf("\t%s:%d\n", ln.file, ln.nu);
+        default:
+            printf("Error\n");
+        }
 
         free(buf);
     }
@@ -144,18 +167,17 @@ main(int argc, const char *argv[])
     test_dwarf(argv[0]);
     pid = start_debugee(argv);
 
-    return 0;
-
-    printf("after attach\n");
-
     while (true) {
-        ret = ptrace(PTRACE_SYSCALL, pid, NULL, NULL);
+        ret = ptrace(PTRACE_SINGLESTEP, pid, NULL, NULL);
         if (ret)
             error("PTRACE_SYSCALL error");
 
         ret = waitpid(pid, &st, 0);
         if (ret < 0)
             error("waitpid error");
+
+        ret = ptrace(PTRACE_GETREGS, pid, NULL, &regs);
+        printf("pc = %llx rax = %llx %llx\n", regs.rip, regs.orig_rax, regs.rbx);
 
         if (WIFEXITED(st)) {
             printf("child exited\n");
@@ -164,16 +186,18 @@ main(int argc, const char *argv[])
         if (WIFSTOPPED(st) && (WSTOPSIG(st) == (SIGTRAP | 0x80))) {
             insyscall = !insyscall;
 
-            printf("syscall %s ", insyscall ? "entering" : "exiting");
+            printf("syscall %s ", insyscall ? "entering" : "exiting\n");
+            fflush(stdout);
             ret = ptrace(PTRACE_GETREGS, pid, NULL, &regs);
             if (ret)
                 printf("can't get regs\n");
             if (!insyscall) {
 //                print_ret_status(&regs);
             } else {
-//                print_regs(&regs);
+                printf("pc = %llx rax = %llx %llx", regs.rip, regs.orig_rax, regs.rbx);
             }
             printf("\n");
+            fflush(stdout);
         }
     }
 
