@@ -18,7 +18,10 @@ int word_size;
 
 
 void op_ext(struct dwarf_machine *m, uint8_t *buf, size_t *size);
+void op_copy(struct dwarf_machine *m, uint8_t *buf, size_t *size);
 void op_advance_pc(struct dwarf_machine *m, uint8_t *buf, size_t *size);
+void op_advance_line(struct dwarf_machine *m, uint8_t *buf, size_t *size);
+void op_set_file(struct dwarf_machine *m, uint8_t *buf, size_t *size);
 void op_set_column(struct dwarf_machine *m, uint8_t *buf, size_t *size);
 void op_negate_stmt(struct dwarf_machine *m, uint8_t *buf, size_t *size);
 void op_const_add_pc(struct dwarf_machine *m, uint8_t *buf, size_t *size);
@@ -30,7 +33,10 @@ struct opcode {
     void (*handler)(struct dwarf_machine *, uint8_t *, size_t *);
 } ops[] = {
     [0x00] = { "extended", "extended",         op_ext              },
+    [0x01] = { "standart", "copy",             op_copy             },
     [0x02] = { "standart", "advance_pc",       op_advance_pc       },
+    [0x03] = { "standart", "advance_line",     op_advance_line     },
+    [0x04] = { "standart", "set_file",         op_set_file         },
     [0x05] = { "standart", "set_column",       op_set_column       },
     [0x06] = { "standart", "negate_stmt",      op_negate_stmt      },
     [0x08] = { "standart", "const_add_pc",     op_const_add_pc     },
@@ -196,7 +202,7 @@ static struct dwarf_obj
 obj_dwarf_class_block1(uint8_t *die, struct obj *o, size_t *len)
 {
     (void) o;
-    *len = 8;
+    *len = 1 + *die;
     return (struct dwarf_obj) {
         .class  = dwarf_class_block,
         .un.block = {
@@ -423,6 +429,7 @@ dwarf_cu_decode(uint8_t *buf, struct obj *o)
     size_t _;
     struct dwarf_abbrev atbl = dwarf_abbrevtbl_decode(dabbrev.buf + ret.abbrev_off, &_);
     uint8_t *die = buf;
+//    uint8_t *die_orig = buf - 0xb;
     size_t die_len = ret.dies_len;
 
     while (die_len > 0) {
@@ -444,6 +451,8 @@ dwarf_cu_decode(uint8_t *buf, struct obj *o)
                 todo();
             }
 
+//            printf(" <%lx> form %s %s\n", die - die_orig, dwarf_form_lookup(a.form), dwarf_attrib_lookup(a.name));
+//            fflush(stdout);
             a.val = forms[a.form].obj(die, o, &len);
             vector_push(&attrs, a);
 
@@ -573,11 +582,13 @@ op_ext(struct dwarf_machine *m, uint8_t *buf, size_t *size)
 
     switch (*buf++) {
     case end_sequence:
+        printf("\tend of sequence\n");
         *m = (struct dwarf_machine) {
-            .addr   = 0,
-            .file   = 1,
-            .line   = 1,
-            .op_idx = 0,
+            .addr     = 0,
+            .file     = 1,
+            .line     = 1,
+            .op_idx   = 0,
+            .is_ended = true,
         };
         break;
     case set_address:
@@ -603,6 +614,20 @@ op_ext(struct dwarf_machine *m, uint8_t *buf, size_t *size)
 }
 
 void
+op_advance_line(struct dwarf_machine *m, uint8_t *buf, size_t *size)
+{
+    *size = leb_len(buf);
+    m->line += sleb_decode(buf);
+}
+
+void
+op_set_file(struct dwarf_machine *m, uint8_t *buf, size_t *size)
+{
+    *size = leb_len(buf);
+    m->file = uleb_decode(buf);
+}
+
+void
 op_set_column(struct dwarf_machine *m, uint8_t *buf, size_t *size)
 {
     (void) m;
@@ -610,6 +635,14 @@ op_set_column(struct dwarf_machine *m, uint8_t *buf, size_t *size)
     /*
      * Do nothing. Skipping 1 argument.
      */
+}
+
+void
+op_copy(struct dwarf_machine *m, uint8_t *buf, size_t *size)
+{
+    (void) m;
+    (void) buf;
+    *size = 0;
 }
 
 void
@@ -682,14 +715,15 @@ line2addr(struct line *ln, struct sect dline, struct dwarf_cu *cu)
     uint8_t *buf = dline.buf + len;
     ssize_t rem  = dline.size - len;
     struct dwarf_machine m = {
-        .addr   = 0,
-        .file   = 1,
-        .line   = 1,
-        .op_idx = 0,
-        .prol   = &prol,
+        .addr     = 0,
+        .file     = 1,
+        .line     = 1,
+        .op_idx   = 0,
+        .prol     = &prol,
+        .is_ended = false,
     };
 
-    while (rem > 0) {
+    while (!m.is_ended) {
         size_t idx = buf[0];
         struct opcode *op = &ops[idx];
         size_t sz;
@@ -717,6 +751,7 @@ line2addr(struct line *ln, struct sect dline, struct dwarf_cu *cu)
         rem -= sz;
     }
 
+    printf("End\n");
     dwarf_prol_free(&prol);
 
     return 0;
@@ -749,14 +784,16 @@ addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
     uint8_t *buf = dline.buf + len;
     ssize_t rem  = dline.size - len;
     struct dwarf_machine m = {
-        .addr   = 0,
-        .file   = 1,
-        .line   = 1,
-        .op_idx = 0,
-        .prol   = &prol,
+        .addr     = 0,
+        .file     = 1,
+        .line     = 1,
+        .op_idx   = 0,
+        .prol     = &prol,
+        .is_ended = false,
     };
+    int first = 0;
 
-    while (rem > 0) {
+    while (!m.is_ended) {
         size_t idx = buf[0];
         struct opcode *op = &ops[idx];
         size_t sz;
@@ -773,8 +810,10 @@ addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
         }
 
         sz++;
+        printf("%s/%s:%6d -- %p op %x\n", cdir ? cdir : "(null)", name ? name : "(null)", new.line, (void *)new.addr, idx);
+        fflush(stdout);
 
-        if (m.addr <= addr && addr < new.addr) {
+        if (m.addr <= addr && addr < new.addr && first) {
             dwarf_prol_free(&prol);
             return (struct line) {
                 .dir  = cdir,
@@ -786,6 +825,7 @@ addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
         m = new;
         buf += sz;
         rem -= sz;
+        first = 1;
     }
 
     dwarf_prol_free(&prol);

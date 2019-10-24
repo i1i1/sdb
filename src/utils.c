@@ -56,6 +56,13 @@ sleb_decode(uint8_t *buf)
 
     } while ((*buf++) & 0x80);
 
+    buf--;
+
+    /* sign bit of byte is second high order bit (0x40) */
+    if (*buf & 0x40)
+        /* sign extend */
+        res |= (~0 << shift);
+
     return res;
 }
 

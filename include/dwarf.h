@@ -90,6 +90,7 @@ struct dwarf_machine {
     int file;
     int line;
     int op_idx;
+    bool is_ended;
 };
 
 struct line {
