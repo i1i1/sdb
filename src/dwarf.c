@@ -694,6 +694,7 @@ line2addr(struct line *ln, struct sect dline, struct dwarf_cu *cu)
 {
     char *name = NULL;
     char *cdir = NULL;
+    size_t dline_off = 0;
 
     vector_foreach(die, &cu->dies) {
         if (die.tag != DW_TAG_compile_unit)
@@ -704,6 +705,8 @@ line2addr(struct line *ln, struct sect dline, struct dwarf_cu *cu)
                 name = at.val.un.str;
             else if (at.name == DW_AT_comp_dir)
                 cdir = at.val.un.str;
+            else if (at.name == DW_AT_stmt_list)
+                dline_off = at.val.un.str;
         }
     }
 
@@ -711,9 +714,8 @@ line2addr(struct line *ln, struct sect dline, struct dwarf_cu *cu)
         return 0;
 
     size_t len;
-    struct dwarf_prol prol = line_header_decode(dline.buf, &len);
-    uint8_t *buf = dline.buf + len;
-    ssize_t rem  = dline.size - len;
+    struct dwarf_prol prol = line_header_decode(dline.buf + dline_off, &len);
+    uint8_t *buf = dline.buf + dline_off + len;
     struct dwarf_machine m = {
         .addr     = 0,
         .file     = 1,
@@ -748,7 +750,6 @@ line2addr(struct line *ln, struct sect dline, struct dwarf_cu *cu)
 
         m = new;
         buf += sz;
-        rem -= sz;
     }
 
     printf("End\n");
@@ -763,6 +764,7 @@ addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
 {
     char *name = NULL;
     char *cdir = NULL;
+    size_t dline_off = 0;
 
     vector_foreach(die, &cu->dies) {
         if (die.tag != DW_TAG_compile_unit)
@@ -773,6 +775,8 @@ addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
                 name = at.val.un.str;
             else if (at.name == DW_AT_comp_dir)
                 cdir = at.val.un.str;
+            else if (at.name == DW_AT_stmt_list)
+                dline_off = at.val.un.str;
         }
     }
 
@@ -780,9 +784,8 @@ addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
         return line_err;
 
     size_t len;
-    struct dwarf_prol prol = line_header_decode(dline.buf, &len);
-    uint8_t *buf = dline.buf + len;
-    ssize_t rem  = dline.size - len;
+    struct dwarf_prol prol = line_header_decode(dline.buf + dline_off, &len);
+    uint8_t *buf = dline.buf + dline_off + len;
     struct dwarf_machine m = {
         .addr     = 0,
         .file     = 1,
@@ -824,11 +827,11 @@ addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
 
         m = new;
         buf += sz;
-        rem -= sz;
         first = 1;
     }
 
     dwarf_prol_free(&prol);
+    printf("\tline_err\n");
 
     return line_err;
 }
