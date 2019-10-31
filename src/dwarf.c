@@ -291,7 +291,7 @@ dwarf_form_struct_lookup(uintmax_t nm)
     }
     return NULL;
 }
- 
+
 const char *
 dwarf_form_lookup(uintmax_t nm)
 {
@@ -706,7 +706,7 @@ line2addr(struct line *ln, struct sect dline, struct dwarf_cu *cu)
             else if (at.name == DW_AT_comp_dir)
                 cdir = at.val.un.str;
             else if (at.name == DW_AT_stmt_list)
-                dline_off = at.val.un.str;
+                dline_off = at.val.un.addr;
         }
     }
 
@@ -742,6 +742,8 @@ line2addr(struct line *ln, struct sect dline, struct dwarf_cu *cu)
         }
 
         sz++;
+//        printf("%s/%s:%6d -- %p op %x\n", cdir ? cdir : "(null)", name ? name : "(null)", new.line, (void *)new.addr, idx);
+//        fflush(stdout);
 
         if (new.line == ln->nu) {
             dwarf_prol_free(&prol);
@@ -776,7 +778,7 @@ addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
             else if (at.name == DW_AT_comp_dir)
                 cdir = at.val.un.str;
             else if (at.name == DW_AT_stmt_list)
-                dline_off = at.val.un.str;
+                dline_off = at.val.un.addr;
         }
     }
 
@@ -813,8 +815,8 @@ addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
         }
 
         sz++;
-        printf("%s/%s:%6d -- %p op %x\n", cdir ? cdir : "(null)", name ? name : "(null)", new.line, (void *)new.addr, idx);
-        fflush(stdout);
+//        printf("%s/%s:%6d -- %p op %x\n", cdir ? cdir : "(null)", name ? name : "(null)", new.line, (void *)new.addr, idx);
+//        fflush(stdout);
 
         if (m.addr <= addr && addr < new.addr && first) {
             dwarf_prol_free(&prol);

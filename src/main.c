@@ -66,11 +66,31 @@ start_debugee(const char **argv)
     return pid;
 }
 
+uint64_t
+parse_addr(char *str)
+{
+    uint64_t addr = 0;
+    int i;
+
+    for (i = 2; str[i] && isxdigit(str[i]); i++) {
+        addr *= 16;
+        if ('0' <= str[i] && str[i] <= '9')
+            addr += str[i] - '0';
+        else if ('A' <= str[i] && str[i] <= 'F')
+            addr += str[i] - 'A' + 10;
+        else// if ('a' <= str[i] && str[i] <= 'f')
+            addr += str[i] - 'a' + 10;
+    }
+
+    return addr;
+}
+
 void
-test_dwarf(const char *fn)
+debug_file(const char *fn, pid_t pid)
 {
     struct obj *o;
     vector_decl(char, dir);
+    (void) pid;
 
     if ((o = obj_init(fn)) == NULL)
         error("Not an object\n");
@@ -78,37 +98,20 @@ test_dwarf(const char *fn)
     vector_of(struct dwarf_cu) cus = dwarf_cus_decode(o);
 
     for (;;) {
-        char *buf;
-        size_t len;
+        char *buf = NULL;
+        size_t len = 0;
 
         printf(">> ");
 
-        buf = NULL;
-        len = 0;
-
-        if (getline(&buf, &len, stdin) == -1) {
+        if (getline(&buf, &len, stdin) == -1 || STREQ(buf, "end\n")) {
+            vector_free(&dir);
             free(buf);
             break;
         }
 
-        if (STREQ(buf, "end\n"))
-            break;
-
         switch (buf[0]) {
         case 'a': {
-            size_t addr = 0;
-            int i;
-
-            for (i = 2; buf[i] && isxdigit(buf[i]); i++) {
-                addr *= 16;
-                if ('0' <= buf[i] && buf[i] <= '9')
-                    addr += buf[i] - '0';
-                else if ('A' <= buf[i] && buf[i] <= 'F')
-                    addr += buf[i] - 'A' + 10;
-                else// if ('a' <= buf[i] && buf[i] <= 'f')
-                    addr += buf[i] - 'a' + 10;
-            }
-
+            size_t addr = parse_addr(buf + 2);
             struct line ln = dwarf_addr2line(o, cus, addr);
 
             printf("\t%s/%s:%d\n", ln.dir, ln.file, ln.nu);
@@ -135,6 +138,7 @@ test_dwarf(const char *fn)
             };
 
             printf("\tpc = %p\n", (void *)dwarf_line2addr(o, cus, &ln));
+            vector_free(&file);
             break;
         }
         default:
@@ -147,27 +151,13 @@ test_dwarf(const char *fn)
     printf("File size = %ld\n", o->sz);
     dwarf_cus_free(cus);
     obj_deinit(o);
-}
 
-int
-main(int argc, const char *argv[])
-{
+#if 0
     long ret;
     int st;
-    pid_t pid;
     struct user_regs_struct regs;
 
-    if (argc < 2) {
-        usage();
-        exit(1);
-    }
-
-    argv++;
-
-    test_dwarf(argv[0]);
-    pid = start_debugee(argv);
-
-    while (true) {
+    for (;;) {
         ret = ptrace(PTRACE_SINGLESTEP, pid, NULL, NULL);
         if (ret)
             error("PTRACE_SYSCALL error");
@@ -202,6 +192,22 @@ main(int argc, const char *argv[])
     }
 
     ptrace(PTRACE_DETACH, pid, NULL, NULL);
+#endif
+}
+
+int
+main(int argc, const char *argv[])
+{
+    pid_t pid;
+
+    if (argc < 2) {
+        usage();
+        exit(1);
+    }
+
+    argv++;
+    pid = start_debugee(argv);
+    debug_file(argv[0], pid);
 
     return 0;
 }

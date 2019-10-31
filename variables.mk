@@ -14,13 +14,13 @@ debugee: debugee.c
 	@$(CC) $(CFLAGS) -o debugee debugee.c
 
 test: debugee
-	./$(OUT) ./debugee
+	./$(OUT) ./$(OUT)
 
 $(SRC): untabify
 
 untabify:
 	@echo UNTABIFY
-	@awk '/\t/ {printf("%s:%d:%s\n", FILENAME, FNR, $$0); a=1} END{exit(a)}' $(SRC) $(HDR)
+	@awk '/\t/ || /[ \t]+$$/ {printf("%s:%d:%s\n", FILENAME, FNR, $$0); a=1} END{exit(a)}' $(SRC) $(HDR)
 
 userclean:
 	rm -f debugee
