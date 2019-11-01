@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <unistd.h>
 
 #include <asm/unistd.h>
@@ -145,7 +146,7 @@ dbg_getw(pid_t pid, size_t addr)
 void
 dbg_setw(pid_t pid, size_t addr, size_t val)
 {
-    xptrace(PTRACE_POKETEXT, pid, (void *)addr, &val);
+    ptrace(PTRACE_POKETEXT, pid, (void *)addr, val);
 }
 
 void
@@ -153,5 +154,30 @@ dbg_continue(pid_t pid, int *st)
 {
     xptrace(PTRACE_CONT, pid, NULL, NULL);
     xwaitpid(pid, st, 0);
+}
+
+void
+dbg_enable_breakpoint(pid_t pid, struct dbg_breakpoint *bp)
+{
+    if (!bp->is_enabled) {
+        int int3_x86 = 0xCC;
+
+        bp->is_enabled = true;
+        bp->orig_data = dbg_getw(pid, bp->addr);
+
+        size_t changed_data = (bp->orig_data & 0xFFFFFFFFFFFFFF00) | int3_x86;
+        dbg_setw(pid, bp->addr, changed_data);
+    }
+}
+
+struct dbg_breakpoint
+dbg_add_breakpoint(pid_t pid, size_t addr)
+{
+    struct dbg_breakpoint bp = {
+        .addr       = addr,
+        .is_enabled = false,
+    };
+    dbg_enable_breakpoint(pid, &bp);
+    return bp;
 }
 

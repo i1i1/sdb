@@ -18,6 +18,12 @@
 #define DBG_REG_R1      "rax"
 #define DBG_REG_R2      "rbx"
 
+struct dbg_breakpoint {
+    size_t addr;
+    size_t orig_data;
+    bool is_enabled;
+};
+
 
 pid_t dbg_openfile(const char **argv);
 
@@ -30,6 +36,8 @@ void dbg_setw(pid_t pid, size_t addr, size_t val);
 void dbg_continue(pid_t pid, int *st);
 
 size_t dbg_getreg_by_name(pid_t pid, char *reg);
+
+struct dbg_breakpoint dbg_add_breakpoint(pid_t pid, size_t addr);
 
 void dbg_detach(pid_t pid);
 

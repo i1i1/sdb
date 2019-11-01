@@ -129,6 +129,7 @@ debug_file(const char *fn, pid_t pid)
 
     printf("start at %p\n", (void *)obj_get_start(o));
 
+    dbg_add_breakpoint(pid, obj_get_start(o));
     dbg_continue(pid, &st);
     DBG_PRINT_REGS();
 

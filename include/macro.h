@@ -24,7 +24,7 @@
 #define _STRINGIFY(a) #a
 #define STRINGIFY(a) _STRINGIFY(a)
 
-#define error(args...) do { fprintf(stderr, args); fflush(stderr); fflush(stdout); exit(1); } while(0)
+#define error(args...) do { fprintf(stderr, args); fprintf(stderr, "\n"); fflush(stderr); fflush(stdout); exit(1); } while(0)
 #define todo() do { fprintf(stderr, "TODO!\n"); fflush(stderr); fflush(stdout); exit(1); } while(0)
 
 #include <stdio.h>
