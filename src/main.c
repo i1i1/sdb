@@ -1,24 +1,18 @@
-#include <signal.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
-#include <unistd.h>
 #include <assert.h>
 #include <ctype.h>
+#include <signal.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
-//#include <asm/unistd.h>
-
-#include <sys/types.h>
-#include <sys/ptrace.h>
-#include <sys/user.h>
-#include <sys/wait.h>
-
-#include "macro.h"
-#include "utils.h"
-#include "obj.h"
+#include "dbg.h"
 #include "dwarf.h"
+#include "macro.h"
+#include "obj.h"
+#include "utils.h"
 #include "vector.h"
 
 
@@ -31,39 +25,6 @@ usage(void)
     fprintf(stderr, "USAGE:\n"
             "\n"
             "program debugee [debugee-args]\n");
-}
-
-void
-ptrace_traceme() {
-    int ret;
-
-    ret = ptrace(PTRACE_TRACEME, 0, NULL, NULL);
-    if (ret != 0)
-        error("TRACEME error");
-}
-
-pid_t
-start_debugee(const char **argv)
-{
-    pid_t pid;
-    int st;
-
-    pid = fork();
-    switch (pid) {
-    case 0:
-        printf("executing %s\n", argv[0]);
-        ptrace_traceme();
-        execvp(argv[0], (char * const *)argv);
-        exit(0);
-    case -1:
-        error("fork error");
-    default:
-        break;
-    }
-
-    wait(&st);
-
-    return pid;
 }
 
 uint64_t
@@ -150,49 +111,39 @@ debug_file(const char *fn, pid_t pid)
 
     printf("File size = %ld\n", o->sz);
     dwarf_cus_free(cus);
-    obj_deinit(o);
 
-#if 0
-    long ret;
+#define DBG_PRINT_REGS()                                            \
+    do {                                                            \
+        size_t pc      = dbg_getreg_by_name(pid, DBG_REG_PC);       \
+        size_t ir      = dbg_getw(pid, pc);                         \
+        size_t syscall = dbg_getreg_by_name(pid, DBG_REG_SYSCALL);  \
+        size_t r2      = dbg_getreg_by_name(pid, DBG_REG_R2);       \
+                                                                    \
+        printf("pc: %lx [pc]: %016lx rax: %016lx rbx: %016lx\n",    \
+               pc, ir, syscall, r2);                                \
+        fflush(stdout);                                             \
+    } while (0)
+
     int st;
-    struct user_regs_struct regs;
+    int insyscall = 0;
 
-    for (;;) {
-        ret = ptrace(PTRACE_SINGLESTEP, pid, NULL, NULL);
-        if (ret)
-            error("PTRACE_SYSCALL error");
+    printf("start at %p\n", (void *)obj_get_start(o));
 
-        ret = waitpid(pid, &st, 0);
-        if (ret < 0)
-            error("waitpid error");
+    dbg_continue(pid, &st);
+    DBG_PRINT_REGS();
 
-        ret = ptrace(PTRACE_GETREGS, pid, NULL, &regs);
-        printf("pc = %llx rax = %llx %llx\n", regs.rip, regs.orig_rax, regs.rbx);
-
-        if (WIFEXITED(st)) {
-            printf("child exited\n");
-            break;
-        }
-        if (WIFSTOPPED(st) && (WSTOPSIG(st) == (SIGTRAP | 0x80))) {
-            insyscall = !insyscall;
-
-            printf("syscall %s ", insyscall ? "entering" : "exiting\n");
-            fflush(stdout);
-            ret = ptrace(PTRACE_GETREGS, pid, NULL, &regs);
-            if (ret)
-                printf("can't get regs\n");
-            if (!insyscall) {
-//                print_ret_status(&regs);
-            } else {
-                printf("pc = %llx rax = %llx %llx", regs.rip, regs.orig_rax, regs.rbx);
-            }
-            printf("\n");
-            fflush(stdout);
-        }
+    if (WIFSTOPPED(st)) {
+        insyscall = !insyscall;
+        printf("syscall %s\n", insyscall ? "entering" : "exiting");
     }
 
-    ptrace(PTRACE_DETACH, pid, NULL, NULL);
-#endif
+//    while (!WIFEXITED(st)) {
+//        DBG_PRINT_REGS();
+//        dbg_singlestep(pid, &st);
+//    }
+
+    printf("child exited\n");
+    obj_deinit(o);
 }
 
 int
@@ -206,7 +157,7 @@ main(int argc, const char *argv[])
     }
 
     argv++;
-    pid = start_debugee(argv);
+    pid = dbg_openfile(argv);
     debug_file(argv[0], pid);
 
     return 0;
