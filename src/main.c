@@ -47,11 +47,10 @@ parse_addr(char *str)
 }
 
 void
-debug_file(const char *fn, pid_t pid)
+debug_file(const char *fn, struct dbg_process *dp)
 {
     struct obj *o;
     vector_decl(char, dir);
-    (void) pid;
 
     if ((o = obj_init(fn)) == NULL)
         error("Not an object\n");
@@ -112,31 +111,33 @@ debug_file(const char *fn, pid_t pid)
     printf("File size = %ld\n", o->sz);
     dwarf_cus_free(cus);
 
-#define DBG_PRINT_REGS()                                            \
-    do {                                                            \
-        size_t pc      = dbg_getreg_by_name(pid, DBG_REG_PC);       \
-        size_t ir      = dbg_getw(pid, pc);                         \
-        size_t syscall = dbg_getreg_by_name(pid, DBG_REG_SYSCALL);  \
-        size_t r2      = dbg_getreg_by_name(pid, DBG_REG_R2);       \
-                                                                    \
-        printf("pc: %lx [pc]: %016lx rax: %016lx rbx: %016lx\n",    \
-               pc, ir, syscall, r2);                                \
-        fflush(stdout);                                             \
+#define DBG_PRINT_REGS()                                                \
+    do {                                                                \
+        size_t pc      = dbg_getreg_by_name(dp, DBG_REG_PC);            \
+        size_t ir      = dbg_getw(dp, pc);                              \
+        size_t syscall = dbg_getreg_by_name(dp, DBG_REG_SYSCALL);       \
+        size_t r1      = dbg_getreg_by_name(dp, DBG_REG_R1);            \
+        size_t r2      = dbg_getreg_by_name(dp, DBG_REG_R2);            \
+                                                                        \
+        printf("pc: %lx [pc]: %016lx orig_rax: %016lx rax: %016lx rbx: %016lx\n", \
+               pc - 0x555555554000, ir, syscall, r1, r2);                                \
+        fflush(stdout);                                                 \
     } while (0)
-
-    int st;
-    int insyscall = 0;
 
     printf("start at %p\n", (void *)obj_get_start(o));
 
-    dbg_add_breakpoint(pid, obj_get_start(o));
-    dbg_continue(pid, &st);
-    DBG_PRINT_REGS();
+    dbg_add_breakpoint(dp, obj_get_start(o));
+    dbg_continue(dp);
+    printf("At breakpoint (start) - %d\n", dp->st.type == DBG_STATE_BREAK);
+    dbg_remove_breakpoint(dp);
 
-    if (WIFSTOPPED(st)) {
-        insyscall = !insyscall;
-        printf("syscall %s\n", insyscall ? "entering" : "exiting");
-    }
+    dbg_add_breakpoint(dp, 0x11a0);
+    dbg_continue(dp);
+
+    printf("At breakpoint - %d\n", dp->st.type == DBG_STATE_BREAK);
+    DBG_PRINT_REGS();
+    fflush(stdout);
+
 
 //    while (!WIFEXITED(st)) {
 //        DBG_PRINT_REGS();
@@ -145,12 +146,13 @@ debug_file(const char *fn, pid_t pid)
 
     printf("child exited\n");
     obj_deinit(o);
+    dbg_deinit(dp);
 }
 
 int
 main(int argc, const char *argv[])
 {
-    pid_t pid;
+    struct dbg_process dp;
 
     if (argc < 2) {
         usage();
@@ -158,8 +160,8 @@ main(int argc, const char *argv[])
     }
 
     argv++;
-    pid = dbg_openfile(argv);
-    debug_file(argv[0], pid);
+    dp = dbg_openfile(argv);
+    debug_file(argv[0], &dp);
 
     return 0;
 }

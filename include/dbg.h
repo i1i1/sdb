@@ -1,6 +1,7 @@
 #ifndef _DBG_H_
 #define _DBG_H_
 
+#include <stdbool.h>
 #include <unistd.h>
 
 #include <asm/unistd.h>
@@ -10,13 +11,14 @@
 #include <sys/wait.h>
 #include <sys/ptrace.h>
 
-/*
- * Assuming that we have x86_64.
- */
-#define DBG_REG_PC      "rip"
-#define DBG_REG_SYSCALL "orig_rax"
-#define DBG_REG_R1      "rax"
-#define DBG_REG_R2      "rbx"
+#include "arch/dbg.h"
+#include "vector.h"
+
+
+struct dbg_reg {
+    char  *name;
+    size_t val; /* let's debug only our own architecture */
+};
 
 struct dbg_breakpoint {
     size_t addr;
@@ -24,22 +26,48 @@ struct dbg_breakpoint {
     bool is_enabled;
 };
 
+enum DBG_STATES {
+    DBG_STATE_NONE,
+    DBG_STATE_BREAK,
 
-pid_t dbg_openfile(const char **argv);
+    DBG_STATE_EXIT,
+    DBG_STATE_STOP,
+    DBG_STATE_TERM,
+};
 
-void dbg_singlestep(pid_t pid, int *st);
+struct dbg_process_state {
+    enum DBG_STATES type;
+    union {
+        int sig;
+        int code;
+    } un;
+};
 
-long dbg_getw(pid_t pid, size_t addr);
+struct dbg_process {
+    pid_t pid;
+    vector_of(struct dbg_breakpoint) bps;
+    struct dbg_process_state st;
+};
 
-void dbg_setw(pid_t pid, size_t addr, size_t val);
+extern struct dbg_reg regs_def[DBG_NUM_REGS];
 
-void dbg_continue(pid_t pid, int *st);
 
-size_t dbg_getreg_by_name(pid_t pid, char *reg);
+struct dbg_process dbg_openfile(const char **argv);
+void dbg_deinit(struct dbg_process *dp);
 
-struct dbg_breakpoint dbg_add_breakpoint(pid_t pid, size_t addr);
+void dbg_detach(struct dbg_process *dp);
 
-void dbg_detach(pid_t pid);
+long dbg_getw(struct dbg_process *dp, size_t addr);
+void dbg_setw(struct dbg_process *dp, size_t addr, size_t val);
+
+void dbg_continue(struct dbg_process *dp);
+void dbg_singlestep(struct dbg_process *dp);
+
+size_t dbg_getreg_by_name(struct dbg_process *dp, char *reg);
+void dbg_setreg_by_name(struct dbg_process *dp, char *reg, size_t val);
+
+void dbg_add_breakpoint(struct dbg_process *dp, size_t addr);
+void dbg_remove_breakpoint(struct dbg_process *dp);
 
 
 #endif /* _DBG_H_ */

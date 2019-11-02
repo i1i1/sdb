@@ -3,95 +3,73 @@
 
 #include <asm/unistd.h>
 
+#include <sys/personality.h>
+#include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/user.h>
 #include <sys/wait.h>
-#include <sys/ptrace.h>
 
 #include "dbg.h"
 #include "macro.h"
 #include "utils.h"
 
-#define DBG_NUM_REGS (sizeof(struct user_regs_struct) / sizeof(size_t))
-
-
-struct dbg_reg {
-    char  *name;
-    size_t val; /* let's debug only our own architecture */
-};
-
-
-/*
- * Assuming that we have x86_64.
- */
-struct dbg_reg regs_def[DBG_NUM_REGS] = {
-    { "r15", 0 },
-    { "r14", 0 },
-    { "r13", 0 },
-    { "r12", 0 },
-    { "rbp", 0 },
-    { "rbx", 0 },
-    { "r11", 0 },
-    { "r10", 0 },
-    { "r9", 0 },
-    { "r8", 0 },
-    { "rax", 0 },
-    { "rcx", 0 },
-    { "rdx", 0 },
-    { "rsi", 0 },
-    { "rdi", 0 },
-    { "orig_rax", 0 },
-    { "rip", 0 },
-    { "cs", 0 },
-    { "eflags", 0 },
-    { "rsp", 0 },
-    { "ss", 0 },
-    { "fs_base", 0 },
-    { "gs_base", 0 },
-    { "ds", 0 },
-    { "es", 0 },
-    { "fs", 0 },
-    { "gs", 0 },
-};
+#include "arch/dbg.h"
 
 
 static void
-xptrace(int request, pid_t pid, void *addr, void *data)
+disable_randomization(void)
 {
-    int ret = ptrace(request, pid, addr, data);
-    if (ret)
-        error("PTRACE error %d", request);
+    int old = personality(0xffffffff);
+    if (personality(old | ADDR_NO_RANDOMIZE) == -1)
+        error("Personality isn't working");
 }
 
-static pid_t
-xwaitpid(pid_t pid, int *wstatus, int options)
+static struct dbg_process_state
+get_state(int st)
 {
-    pid_t ret = waitpid(pid, wstatus, options);
-    if (ret < 0)
-        error("waitpid error");
-    return ret;
+    if (WIFEXITED(st)) {
+        return (struct dbg_process_state) {
+            .type   = DBG_STATE_EXIT,
+            .un.code = WEXITSTATUS(st),
+        };
+    }
+    if (WIFSIGNALED(st)) {
+        return (struct dbg_process_state) {
+            .type  = DBG_STATE_TERM,
+            .un.sig = WTERMSIG(st),
+        };
+    }
+    if (WSTOPSIG(st)) {
+        return (struct dbg_process_state) {
+            .type  = (WSTOPSIG(st) == SIGTRAP ? DBG_STATE_BREAK : DBG_STATE_STOP),
+            .un.sig = WSTOPSIG(st),
+        };
+    }
+    return (struct dbg_process_state) {
+        .type = DBG_STATE_NONE,
+    };
 }
 
-static void
-ptrace_traceme() {
-    int ret;
-
-    ret = ptrace(PTRACE_TRACEME, 0, NULL, NULL);
-    if (ret != 0)
-        error("TRACEME error");
+static bool
+dbg_is_at_breakpoint(struct dbg_process *dp, const struct dbg_breakpoint *bp)
+{
+    return (dbg_getreg_by_name(dp, DBG_REG_PC) == bp->addr + 1);
 }
 
-pid_t
+
+struct dbg_process
 dbg_openfile(const char **argv)
 {
-    pid_t pid;
+    struct dbg_process ret;
     int st;
 
-    pid = fork();
-    switch (pid) {
+    disable_randomization();
+
+    ret.pid = fork();
+    switch (ret.pid) {
     case 0:
         printf("executing %s\n", argv[0]);
-        ptrace_traceme();
+        xptrace(PTRACE_TRACEME, 0, NULL, NULL);
         execvp(argv[0], (char * const *)argv);
         exit(0);
     case -1:
@@ -100,84 +78,150 @@ dbg_openfile(const char **argv)
         break;
     }
 
-    xwaitpid(pid, &st, 0);
+    xwaitpid(ret.pid, &st, 0);
+    ret.st = get_state(st);
+    ret.bps = NULL;
 
-    return pid;
+    return ret;
 }
 
 void
-dbg_singlestep(pid_t pid, int *st)
+dbg_singlestep(struct dbg_process *dp)
 {
-    xptrace(PTRACE_SINGLESTEP, pid, NULL, NULL);
-    xwaitpid(pid, st, 0);
+    int st;
+
+    xptrace(PTRACE_SINGLESTEP, dp->pid, NULL, NULL);
+    xwaitpid(dp->pid, &st, 0);
+    dp->st = get_state(st);
+}
+
+void
+dbg_setreg_by_name(struct dbg_process *dp, char *reg, size_t val)
+{
+    for (unsigned i = 0; i < DBG_NUM_REGS; i++) {
+        if (STREQ(regs_def[i].name, reg)) {
+            ptrace(PTRACE_POKEUSER, dp->pid, i * sizeof(size_t), val);
+            return;
+        }
+    }
 }
 
 size_t
-dbg_getreg_by_name(pid_t pid, char *reg)
+dbg_getreg_by_name(struct dbg_process *dp, char *reg)
 {
-    struct user_regs_struct r;
-    size_t *arr = (void *)&r;
-
-    xptrace(PTRACE_GETREGS, pid, NULL, &r);
-
     for (unsigned i = 0; i < DBG_NUM_REGS; i++) {
         if (STREQ(regs_def[i].name, reg))
-            return arr[i];
+            return ptrace(PTRACE_PEEKUSER, dp->pid, i * sizeof(size_t), NULL);
     }
 
     return 0;
 }
 
 void
-dbg_detach(pid_t pid)
+dbg_detach(struct dbg_process *dp)
 {
-    xptrace(PTRACE_DETACH, pid, NULL, NULL);
+    xptrace(PTRACE_DETACH, dp->pid, NULL, NULL);
 }
 
 long
-dbg_getw(pid_t pid, size_t addr)
+dbg_getw(struct dbg_process *dp, size_t addr)
 {
     /*
      * No xptrace here!
      */
-    return ptrace(PTRACE_PEEKTEXT, pid, (void *)addr, NULL);
+    return ptrace(PTRACE_PEEKTEXT, dp->pid, (void *)addr, NULL);
 }
 
 void
-dbg_setw(pid_t pid, size_t addr, size_t val)
+dbg_setw(struct dbg_process *dp, size_t addr, size_t val)
 {
-    ptrace(PTRACE_POKETEXT, pid, (void *)addr, val);
+    /*
+     * No xptrace here!
+     */
+    ptrace(PTRACE_POKETEXT, dp->pid, (void *)addr, val);
 }
 
-void
-dbg_continue(pid_t pid, int *st)
-{
-    xptrace(PTRACE_CONT, pid, NULL, NULL);
-    xwaitpid(pid, st, 0);
-}
-
-void
-dbg_enable_breakpoint(pid_t pid, struct dbg_breakpoint *bp)
+static void
+dbg_enable_breakpoint(struct dbg_process *dp, struct dbg_breakpoint *bp)
 {
     if (!bp->is_enabled) {
         int int3_x86 = 0xCC;
 
         bp->is_enabled = true;
-        bp->orig_data = dbg_getw(pid, bp->addr);
+        bp->orig_data = dbg_getw(dp, bp->addr);
 
         size_t changed_data = (bp->orig_data & 0xFFFFFFFFFFFFFF00) | int3_x86;
-        dbg_setw(pid, bp->addr, changed_data);
+        dbg_setw(dp, bp->addr, changed_data);
     }
 }
 
-struct dbg_breakpoint
-dbg_add_breakpoint(pid_t pid, size_t addr)
+static void
+dbg_disable_breakpoint(struct dbg_process *dp, struct dbg_breakpoint *bp)
+{
+    if (bp->is_enabled) {
+        bp->is_enabled = false;
+        dbg_setw(dp, bp->addr, bp->orig_data);
+    }
+}
+
+static void
+dbg_continue_breakpoint(struct dbg_process *dp, struct dbg_breakpoint *bp)
+{
+    if (dbg_is_at_breakpoint(dp, bp)) {
+        dbg_disable_breakpoint(dp, bp);
+        dbg_setreg_by_name(dp, DBG_REG_PC,
+                           dbg_getreg_by_name(dp, DBG_REG_PC) - 1);
+        dbg_singlestep(dp);
+        dbg_enable_breakpoint(dp, bp);
+    }
+}
+
+void
+dbg_continue(struct dbg_process *dp)
+{
+    int st;
+
+    xptrace(PTRACE_CONT, dp->pid, NULL, NULL);
+    xwaitpid(dp->pid, &st, 0);
+    dp->st = get_state(st);
+
+    if (dp->st.type == DBG_STATE_BREAK) {
+        vector_foreach(bp, &dp->bps) {
+            if (dbg_is_at_breakpoint(dp, &bp)) {
+                dbg_continue_breakpoint(dp, &bp);
+                return;
+            }
+        }
+    }
+}
+
+void
+dbg_add_breakpoint(struct dbg_process *dp, size_t addr)
 {
     struct dbg_breakpoint bp = {
-        .addr       = addr,
+        .addr       = addr + 0x555555554000, // Hard coded offset
         .is_enabled = false,
     };
-    dbg_enable_breakpoint(pid, &bp);
-    return bp;
+    dbg_enable_breakpoint(dp, &bp);
+    vector_push(&dp->bps, bp);
+}
+
+void
+dbg_remove_breakpoint(struct dbg_process *dp)
+{
+    for (unsigned i = 0; i < vector_nmemb(&dp->bps); i++) {
+        if (dbg_is_at_breakpoint(dp, &dp->bps[i])) {
+            if (dp->bps[i].is_enabled)
+                dbg_disable_breakpoint(dp, &dp->bps[i]);
+            dp->bps[i] = vector_pop(&dp->bps);
+            return;
+        }
+    }
+}
+
+void
+dbg_deinit(struct dbg_process *dp)
+{
+    vector_free(&dp->bps);
 }
 
