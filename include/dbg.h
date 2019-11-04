@@ -21,6 +21,7 @@ struct dbg_reg {
 };
 
 struct dbg_breakpoint {
+    int id;
     size_t addr;
     size_t orig_data;
     bool is_enabled;
@@ -64,10 +65,11 @@ void dbg_continue(struct dbg_process *dp);
 void dbg_singlestep(struct dbg_process *dp);
 
 size_t dbg_getreg_by_name(struct dbg_process *dp, char *reg);
+size_t dbg_get_pc(struct dbg_process *dp);
 void dbg_setreg_by_name(struct dbg_process *dp, char *reg, size_t val);
 
-void dbg_add_breakpoint(struct dbg_process *dp, size_t addr);
-void dbg_remove_breakpoint(struct dbg_process *dp);
+int dbg_add_breakpoint(struct dbg_process *dp, size_t addr);
+void dbg_remove_breakpoint(struct dbg_process *dp, int id);
 
 
 #endif /* _DBG_H_ */

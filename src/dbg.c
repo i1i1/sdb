@@ -15,6 +15,8 @@
 
 #include "arch/dbg.h"
 
+int bp_id = 0;
+
 
 static void
 disable_randomization(void)
@@ -85,12 +87,18 @@ dbg_openfile(const char **argv)
     return ret;
 }
 
+size_t
+dbg_get_pc(struct dbg_process *dp)
+{
+    return dbg_getreg_by_name(dp, DBG_REG_PC) - 0x555555554000;
+}
+
 void
 dbg_singlestep(struct dbg_process *dp)
 {
     int st;
 
-    xptrace(PTRACE_SINGLESTEP, dp->pid, NULL, NULL);
+    ptrace(PTRACE_SINGLESTEP, dp->pid, NULL, NULL);
     xwaitpid(dp->pid, &st, 0);
     dp->st = get_state(st);
 }
@@ -195,22 +203,24 @@ dbg_continue(struct dbg_process *dp)
     }
 }
 
-void
+int
 dbg_add_breakpoint(struct dbg_process *dp, size_t addr)
 {
     struct dbg_breakpoint bp = {
+        .id         = bp_id++,
         .addr       = addr + 0x555555554000, // Hard coded offset
         .is_enabled = false,
     };
     dbg_enable_breakpoint(dp, &bp);
     vector_push(&dp->bps, bp);
+    return bp.id;
 }
 
 void
-dbg_remove_breakpoint(struct dbg_process *dp)
+dbg_remove_breakpoint(struct dbg_process *dp, int id)
 {
     for (unsigned i = 0; i < vector_nmemb(&dp->bps); i++) {
-        if (dbg_is_at_breakpoint(dp, &dp->bps[i])) {
+        if (dp->bps[i].id == id) {
             if (dp->bps[i].is_enabled)
                 dbg_disable_breakpoint(dp, &dp->bps[i]);
             dp->bps[i] = vector_pop(&dp->bps);

@@ -582,7 +582,7 @@ op_ext(struct dwarf_machine *m, uint8_t *buf, size_t *size)
 
     switch (*buf++) {
     case end_sequence:
-        printf("\tend of sequence\n");
+//        printf("\tend of sequence\n");
         *m = (struct dwarf_machine) {
             .addr     = 0,
             .file     = 1,
@@ -710,11 +710,12 @@ line2addr(struct line *ln, struct sect dline, struct dwarf_cu *cu)
         }
     }
 
-    if (!name || !cdir || !STREQ(ln->file, name) || !STREQ(ln->dir, cdir))
+    if (!name || !cdir || !STREQ(ln->file, name))
         return 0;
 
     size_t len;
     struct dwarf_prol prol = line_header_decode(dline.buf + dline_off, &len);
+//    uint8_t *buf_orig = dline.buf;
     uint8_t *buf = dline.buf + dline_off + len;
     struct dwarf_machine m = {
         .addr     = 0,
@@ -742,6 +743,7 @@ line2addr(struct line *ln, struct sect dline, struct dwarf_cu *cu)
         }
 
         sz++;
+//        printf(" <%lx>", buf - buf_orig);
 //        printf("%s/%s:%6d -- %p op %x\n", cdir ? cdir : "(null)", name ? name : "(null)", new.line, (void *)new.addr, idx);
 //        fflush(stdout);
 
@@ -754,7 +756,7 @@ line2addr(struct line *ln, struct sect dline, struct dwarf_cu *cu)
         buf += sz;
     }
 
-    printf("End\n");
+//    printf("End\n");
     dwarf_prol_free(&prol);
 
     return 0;
@@ -787,6 +789,7 @@ addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
 
     size_t len;
     struct dwarf_prol prol = line_header_decode(dline.buf + dline_off, &len);
+//    uint8_t *buf_orig = dline.buf;
     uint8_t *buf = dline.buf + dline_off + len;
     struct dwarf_machine m = {
         .addr     = 0,
@@ -815,6 +818,7 @@ addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
         }
 
         sz++;
+//        printf(" <%lx> ", buf - buf_orig);
 //        printf("%s/%s:%6d -- %p op %x\n", cdir ? cdir : "(null)", name ? name : "(null)", new.line, (void *)new.addr, idx);
 //        fflush(stdout);
 
@@ -833,7 +837,7 @@ addr2line(size_t addr, struct sect dline, struct dwarf_cu *cu)
     }
 
     dwarf_prol_free(&prol);
-    printf("\tline_err\n");
+//    printf("\tline_err\n");
 
     return line_err;
 }

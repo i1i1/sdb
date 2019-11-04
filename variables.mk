@@ -2,7 +2,7 @@ ARCH := amd64
 
 CC := gcc
 CFLAGS := -Wall -Wextra -gdwarf-2 -gstrict-dwarf -Iinclude \
-		-Iarch/$(ARCH)/include -O100500
+		-Iarch/$(ARCH)/include -O0
 
 SRC := $(shell find arch/$(ARCH)/src     src     -name "*.c")
 HDR := $(shell find arch/$(ARCH)/include include -name "*.h")

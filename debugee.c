@@ -7,7 +7,7 @@
 void __attribute__ ((noinline))
 func()
 {
-    printf("Hello!");
+    printf("Hello!\n");
     fflush(stdout);
 }
 
