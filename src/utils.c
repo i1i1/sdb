@@ -20,7 +20,7 @@ leb_len(uint8_t *buf)
     return ret;
 }
 
-uintmax_t
+uleb
 uleb_decode(uint8_t *buf)
 {
     uintmax_t res = 0;
@@ -34,14 +34,14 @@ uleb_decode(uint8_t *buf)
         shift += 7;
 
         if (shift > maxshift)
-            error("Too large unsigned leb128 number\n");
+            error("Too large unsigned leb number\n");
 
     } while ((*buf++) & 0x80);
 
     return res;
 }
 
-intmax_t
+sleb
 sleb_decode(uint8_t *buf)
 {
     intmax_t res = 0;
@@ -55,7 +55,7 @@ sleb_decode(uint8_t *buf)
         shift += 7;
 
         if (shift > maxshift)
-            error("Too large unsigned leb128 number\n");
+            error("Too large signed leb number\n");
 
     } while ((*buf++) & 0x80);
 
