@@ -5,10 +5,19 @@
 
 #include <sys/ptrace.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+/* forcing 128 bit numbers */
+typedef __int128 sleb;
+typedef unsigned __int128 uleb;
+#else
+/* using max integers from standart */
+typedef intmax_t sleb;
+typedef uintmax_t uleb;
+#endif
 
-uintmax_t uleb_decode(uint8_t *buf);
-intmax_t  sleb_decode(uint8_t *buf);
-size_t    leb_len(uint8_t *buf);
+uleb uleb_decode(uint8_t *buf);
+sleb sleb_decode(uint8_t *buf);
+size_t leb_len(uint8_t *buf);
 
 void *xmalloc(size_t sz);
 void *xrealloc(void *a, size_t sz);

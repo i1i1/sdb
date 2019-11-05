@@ -20,7 +20,7 @@ leb_len(uint8_t *buf)
     return ret;
 }
 
-uintmax_t
+uleb
 uleb_decode(uint8_t *buf)
 {
     uintmax_t res = 0;
@@ -41,7 +41,7 @@ uleb_decode(uint8_t *buf)
     return res;
 }
 
-intmax_t
+sleb
 sleb_decode(uint8_t *buf)
 {
     intmax_t res = 0;
