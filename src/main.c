@@ -49,7 +49,7 @@ vector_of(struct dwarf_cu) cus;
 struct dbg_process dp;
 
 
-int not_quited = 1;
+bool not_quited = true;
 
 
 void
@@ -114,7 +114,7 @@ cmd_exit(vector_of(vector_of(char)) *args)
         return;
     }
 
-    not_quited = 0;
+    not_quited = false;
     printf("\tBye bye\n");
 }
 
@@ -288,6 +288,25 @@ debug_file(const char *fn)
         for (unsigned i = 0; i < vector_nmemb(&args); i++)
             vector_free(&args[i]);
         vector_free(&args);
+
+        switch (dp.st.type) {
+        case DBG_STATE_BREAK:
+            printf("\tAt breakpoint!\n");
+            break;
+        case DBG_STATE_EXIT:
+            not_quited = false;
+            printf("\tExit with code %d!\n", dp.st.un.code);
+            break;
+        case DBG_STATE_STOP:
+            not_quited = false;
+            printf("\tStoped with signal %d!\n", dp.st.un.sig);
+            break;
+        case DBG_STATE_TERM:
+            not_quited = false;
+            printf("\tExited from signal %d!\n", dp.st.un.sig);
+            break;
+        default: { }
+        }
     }
 
     dwarf_cus_free(cus);

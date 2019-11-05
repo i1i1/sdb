@@ -18,12 +18,52 @@
 int bp_id = 0;
 
 
-static void
-disable_randomization(void)
+static size_t
+get_offset(pid_t pid)
 {
-    int old = personality(0xffffffff);
-    if (personality(old | ADDR_NO_RANDOMIZE) == -1)
-        error("Personality isn't working");
+    char maps[BUFSIZ];
+    FILE *mp;
+
+    snprintf(maps, BUFSIZ, "/proc/%d/maps", (int)pid);
+
+    if ((mp = fopen(maps, "r")) == NULL)
+        return 0;
+
+    char *ln = NULL;
+    size_t len = 0;
+
+    size_t ret = 0;
+
+    while (getline(&ln, &len, mp) != -1) {
+        int i;
+
+        ret = 0;
+
+        while (ln[i] != '-') {
+            ret *= 16;
+            if ('0' <= ln[i] && ln[i] <= '9')
+                ret += ln[i] - '0';
+            else if ('A' <= ln[i] && ln[i] <= 'F')
+                ret += ln[i] - 'A' + 10;
+            else// if ('a' <= ln[i] && ln[i] <= 'f')
+                ret += ln[i] - 'a' + 10;
+            i++;
+        }
+
+        while (ln[i] != ' ')
+            i++;
+
+        i++; /* skipping space */
+        i += 2; /* going to Execute */
+
+        if (ln[i] == 'x')
+            break;
+    }
+
+    free(ln);
+    fclose(mp);
+
+    return ret;
 }
 
 static struct dbg_process_state
@@ -65,8 +105,6 @@ dbg_openfile(const char **argv)
     struct dbg_process ret;
     int st;
 
-    disable_randomization();
-
     ret.pid = fork();
     switch (ret.pid) {
     case 0:
@@ -83,6 +121,7 @@ dbg_openfile(const char **argv)
     xwaitpid(ret.pid, &st, 0);
     ret.st = get_state(st);
     ret.bps = NULL;
+    ret.off = get_offset(ret.pid);
 
     return ret;
 }
@@ -90,7 +129,7 @@ dbg_openfile(const char **argv)
 size_t
 dbg_get_pc(struct dbg_process *dp)
 {
-    return dbg_getreg_by_name(dp, DBG_REG_PC) - 0x555555554000;
+    return dbg_getreg_by_name(dp, DBG_REG_PC) - dp->off;
 }
 
 void
@@ -208,7 +247,7 @@ dbg_add_breakpoint(struct dbg_process *dp, size_t addr)
 {
     struct dbg_breakpoint bp = {
         .id         = bp_id++,
-        .addr       = addr + 0x555555554000, // Hard coded offset
+        .addr       = addr + dp->off,
         .is_enabled = false,
     };
     dbg_enable_breakpoint(dp, &bp);

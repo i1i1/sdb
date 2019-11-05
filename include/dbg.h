@@ -48,6 +48,7 @@ struct dbg_process {
     pid_t pid;
     vector_of(struct dbg_breakpoint) bps;
     struct dbg_process_state st;
+    size_t off;
 };
 
 extern struct dbg_reg regs_def[DBG_NUM_REGS];
