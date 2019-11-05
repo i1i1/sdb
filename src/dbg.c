@@ -31,33 +31,21 @@ get_offset(pid_t pid)
 
     char *ln = NULL;
     size_t len = 0;
-
     size_t ret = 0;
 
-    while (getline(&ln, &len, mp) != -1) {
-        int i;
+    if (getline(&ln, &len, mp) == -1) {
+        fclose(mp);
+        return 0;
+    }
 
-        ret = 0;
-
-        while (ln[i] != '-') {
-            ret *= 16;
-            if ('0' <= ln[i] && ln[i] <= '9')
-                ret += ln[i] - '0';
-            else if ('A' <= ln[i] && ln[i] <= 'F')
-                ret += ln[i] - 'A' + 10;
-            else// if ('a' <= ln[i] && ln[i] <= 'f')
-                ret += ln[i] - 'a' + 10;
-            i++;
-        }
-
-        while (ln[i] != ' ')
-            i++;
-
-        i++; /* skipping space */
-        i += 2; /* going to Execute */
-
-        if (ln[i] == 'x')
-            break;
+    for (int i = 0; ln[i] != '-'; i++) {
+        ret *= 16;
+        if ('0' <= ln[i] && ln[i] <= '9')
+            ret += ln[i] - '0';
+        else if ('A' <= ln[i] && ln[i] <= 'F')
+            ret += ln[i] - 'A' + 10;
+        else// if ('a' <= ln[i] && ln[i] <= 'f')
+            ret += ln[i] - 'a' + 10;
     }
 
     free(ln);
