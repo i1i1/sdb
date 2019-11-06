@@ -59,19 +59,19 @@ get_state(int st)
 {
     if (WIFEXITED(st)) {
         return (struct dbg_process_state) {
-            .type   = DBG_STATE_EXIT,
+            .type = DBG_STATE_EXIT,
             .un.code = WEXITSTATUS(st),
         };
     }
     if (WIFSIGNALED(st)) {
         return (struct dbg_process_state) {
-            .type  = DBG_STATE_TERM,
+            .type = DBG_STATE_TERM,
             .un.sig = WTERMSIG(st),
         };
     }
-    if (WSTOPSIG(st)) {
+    if (WIFSTOPPED(st)) {
         return (struct dbg_process_state) {
-            .type  = (WSTOPSIG(st) == SIGTRAP ? DBG_STATE_BREAK : DBG_STATE_STOP),
+            .type = (WSTOPSIG(st) == SIGTRAP ? DBG_STATE_BREAK : DBG_STATE_STOP),
             .un.sig = WSTOPSIG(st),
         };
     }
@@ -128,6 +128,9 @@ dbg_singlestep(struct dbg_process *dp)
     ptrace(PTRACE_SINGLESTEP, dp->pid, NULL, NULL);
     xwaitpid(dp->pid, &st, 0);
     dp->st = get_state(st);
+
+    if (WIFSTOPPED(st) && WSTOPSIG(st) == SIGTRAP)
+        dp->st.type = DBG_STATE_NONE;
 }
 
 void
@@ -185,7 +188,7 @@ dbg_enable_breakpoint(struct dbg_process *dp, struct dbg_breakpoint *bp)
         bp->is_enabled = true;
         bp->orig_data = dbg_getw(dp, bp->addr);
 
-        size_t changed_data = (bp->orig_data & 0xFFFFFFFFFFFFFF00) | int3_x86;
+        size_t changed_data = (bp->orig_data & (~0xFF)) | int3_x86;
         dbg_setw(dp, bp->addr, changed_data);
     }
 }

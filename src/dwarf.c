@@ -570,9 +570,10 @@ void
 op_ext(struct dwarf_machine *m, uint8_t *buf, size_t *size)
 {
     enum DW_LNE {
-        end_sequence = 0x01,
-        set_address  = 0x02,
-        define_file  = 0x03,
+        end_sequence       = 0x01,
+        set_address        = 0x02,
+        define_file        = 0x03,
+        set_discriminator  = 0x04,
     };
     size_t sz_len = leb_len(buf);
     uintmax_t sz = uleb_decode(buf);
@@ -607,6 +608,8 @@ op_ext(struct dwarf_machine *m, uint8_t *buf, size_t *size)
     case define_file:
         printf("todo define file\n");
         todo();
+        break;
+    case set_discriminator:
         break;
     default:
         error("Unknown extended opcode - %d\n", buf[-1]);
