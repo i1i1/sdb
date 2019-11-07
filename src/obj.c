@@ -14,17 +14,21 @@ struct obj_interface {
     size_t (*get_start)(const struct obj *);
     size_t (*get_sect_num)(const struct obj *);
     struct sect (*get_sect)(const struct obj *, size_t);
+    vector_of(struct symbol) (*get_symbols)(const struct obj *o);
 };
 
-#define OBJ_INT(IS_THIS, GET_START, GET_SECT_N, GET_SECT) \
+vector_of(struct symbol) obj_get_symbols(const struct obj *o);
+
+#define OBJ_INT(IS_THIS, GET_START, GET_SECT_N, GET_SECT, GET_SYMS) \
     {                                 \
         .is_this      = (IS_THIS),    \
         .get_start    = (GET_START),  \
         .get_sect_num = (GET_SECT_N), \
         .get_sect     = (GET_SECT),   \
+        .get_symbols  = (GET_SYMS),   \
     },
 struct obj_interface obj_ints[] = {
-    OBJ_INT(elf64_is_this, elf64_get_start, elf64_sect_num, elf64_get_sect)
+    OBJ_INT(elf64_is_this, elf64_get_start, elf64_sect_num, elf64_get_sect, elf64_get_symbols)
 };
 #undef OBJ_INT
 
@@ -100,6 +104,12 @@ struct sect
 obj_get_sect(const struct obj *o, size_t n)
 {
     return obj_ints[o->idx].get_sect(o, n);
+}
+
+vector_of(struct symbol)
+obj_get_symbols(const struct obj *o)
+{
+    return obj_ints[o->idx].get_symbols(o);
 }
 
 void

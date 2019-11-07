@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+#include "vector.h"
+
 
 struct obj {
     size_t idx;
@@ -15,6 +17,11 @@ struct sect {
     char *name;
     uint8_t *buf;
     size_t size;
+};
+
+struct symbol {
+    char *name;
+    size_t addr;
 };
 
 
@@ -29,6 +36,8 @@ size_t obj_get_sect_num(const struct obj *o);
 struct sect obj_get_sect(const struct obj *o, size_t n);
 
 struct sect obj_get_sect_by_name(const struct obj *o, char *nm);
+
+vector_of(struct symbol) obj_get_symbols(const struct obj *o);
 
 #endif /* _OBJ_H_ */
 

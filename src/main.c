@@ -23,6 +23,7 @@ struct cmd {
 
 
 void cmd_breakpoint(vector_of(vector_of(char)) *args);
+void cmd_breakpoint_symbol(vector_of(vector_of(char)) *args);
 void cmd_continue(vector_of(vector_of(char)) *args);
 void cmd_delete_breakpoint(vector_of(vector_of(char)) *args);
 void cmd_exit(vector_of(vector_of(char)) *args);
@@ -34,6 +35,7 @@ void cmd_step_inst(vector_of(vector_of(char)) *args);
 struct cmd cmds[] = {
 #define CMD(str_, cmd_) { .str = str_, .cmd = cmd_ },
     CMD("b",    cmd_breakpoint)
+    CMD("bs",   cmd_breakpoint_symbol)
     CMD("c",    cmd_continue)
     CMD("d",    cmd_delete_breakpoint)
     CMD("exit", cmd_exit)
@@ -47,10 +49,40 @@ struct cmd cmds[] = {
 struct obj *o;
 vector_of(struct dwarf_cu) cus;
 struct dbg_process dp;
+vector_of(struct symbol) syms;
 
 
 bool not_quited = true;
 
+size_t
+sym_lookup(char *str)
+{
+    vector_foreach(s, &syms) {
+        if (STREQ(s.name, str))
+            return s.addr;
+    }
+    return 0;
+}
+
+void
+cmd_breakpoint_symbol(vector_of(vector_of(char)) *args)
+{
+    if (vector_nmemb(args) != 2) {
+        //printf(" Too many args\n");
+        printf(" Too many args %ld\n", vector_nmemb(args));
+        return;
+    }
+
+    size_t addr = sym_lookup((*args)[1]);
+
+    if (addr == 0) {
+        printf("\tDidn't found symbol `%s'\n", (*args)[1]);
+        return;
+    }
+
+    printf("\tBreakpoint with number %d at %p\n",
+           dbg_add_breakpoint(&dp, addr), addr);
+}
 
 void
 cmd_breakpoint(vector_of(vector_of(char)) *args)
@@ -265,6 +297,7 @@ debug_file(const char *fn)
     if ((o = obj_init(fn)) == NULL)
         error("Not an object\n");
 
+    syms = obj_get_symbols(o);
     cus = dwarf_cus_decode(o);
 
     while (not_quited) {
@@ -312,6 +345,7 @@ debug_file(const char *fn)
     dwarf_cus_free(cus);
     obj_deinit(o);
     dbg_deinit(&dp);
+    vector_free(&syms);
 }
 
 int

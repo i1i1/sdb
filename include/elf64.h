@@ -10,5 +10,6 @@ bool elf64_is_this(const struct obj *o);
 size_t elf64_get_start(const struct obj *o);
 size_t elf64_sect_num(const struct obj *o);
 struct sect elf64_get_sect(const struct obj *o, size_t n);
+vector_of(struct symbol) elf64_get_symbols(const struct obj *o);
 
 #endif /* _ELF64_H_ */
