@@ -56,20 +56,6 @@ elf64_get_sect(const struct obj *o, size_t n)
     };
 }
 
-static char *
-elf64_get_symbol_by_idx(const struct obj *o, Elf64_Sym *s)
-{
-    Elf64_Ehdr *eh = (Elf64_Ehdr *)o->fb;
-    Elf64_Shdr *sh = (Elf64_Shdr *)(o->fb + eh->e_shoff);
-    Elf64_Shdr *strh = &sh[s->st_shndx];
-    char *secstrs = (char *)o->fb + strh->sh_offset;
-
-    if (s->st_name)
-        return NULL;
-
-    return secstrs + s->st_name;
-}
-
 vector_of(struct symbol)
 elf64_get_symbols(const struct obj *o)
 {
