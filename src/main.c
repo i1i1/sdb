@@ -104,10 +104,10 @@ cmd_breakpoint(vector_of(vector_of(char)) *args)
         .file = file,
         .nu   = atoi((*args)[1] + i + 1),
     };
+    size_t addr = dwarf_line2addr(o, cus, &ln);
 
-    bp_id = dbg_add_breakpoint(&dp, dwarf_line2addr(o, cus, &ln));
-    printf("\tBreakpoint with number %d at %p\n", bp_id,
-           (void *)dwarf_line2addr(o, cus, &ln));
+    bp_id = dbg_add_breakpoint(&dp, addr);
+    printf("\tBreakpoint with number %d at %p\n", bp_id, (void *)addr);
 
     vector_free(&file);
 }
@@ -179,6 +179,35 @@ cmd_print_args(vector_of(vector_of(char)) *args)
 }
 
 void
+print_source_line(struct line *ln)
+{
+    char buf[BUFSIZ];
+    FILE *fp;
+
+    snprintf(buf, BUFSIZ, "%s/%s", ln->dir, ln->file);
+
+    if ((fp = fopen(buf, "r")) == NULL)
+        return;
+
+    for (int i = 1; i <= ln->nu; i++) {
+        char *b = NULL;
+        size_t len = 0;
+
+        if (getline(&b, &len, fp) == -1) {
+            free(b);
+            return;
+        }
+
+        if (i == ln->nu) {
+            printf("File %s\n", buf);
+            printf("%d:%s", ln->nu, b);
+        }
+
+        free(b);
+    }
+}
+
+void
 cmd_step(vector_of(vector_of(char)) *args)
 {
     if (vector_nmemb(args) != 1) {
@@ -190,18 +219,14 @@ cmd_step(vector_of(vector_of(char)) *args)
 
     ln = dwarf_addr2line(o, cus, dbg_get_pc(&dp));
 
-    if (ln.file == NULL) {
-        dbg_singlestep(&dp);
-        return;
-    }
-
     do {
-        nln = dwarf_addr2line(o, cus, dbg_getreg_by_name(&dp, DBG_REG_PC));
         dbg_singlestep(&dp);
-    } while (nln.nu == ln.nu && STREQ(nln.file, ln.file));
+        nln = dwarf_addr2line(o, cus, dbg_get_pc(&dp));
+    } while (nln.nu == ln.nu && (nln.file == ln.file || STREQ(nln.file, ln.file)));
 
-    printf("\t%s:%d at %p\n", nln.file, nln.nu,
-           (void *)dbg_getreg_by_name(&dp, DBG_REG_PC));
+    if (nln.file) {
+        print_source_line(&ln);
+    }
 }
 
 void
