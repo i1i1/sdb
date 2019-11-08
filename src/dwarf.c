@@ -88,115 +88,41 @@ obj_dwarf_class_strp(uint8_t *die, struct obj *o, size_t *len)
     };
 }
 
-static struct dwarf_obj
-obj_dwarf_class_data1(uint8_t *die, struct obj *o, size_t *len)
-{
-    (void) o;
-    *len = 1;
-    return (struct dwarf_obj) {
-        .class     = dwarf_class_const,
-        .un.const_ = *(uint8_t *)die,
-    };
+#define CLASS_REF(sz, type)                                              \
+static struct dwarf_obj                                                  \
+PASTE(obj_dwarf_class_ref, sz)(uint8_t *die, struct obj *o, size_t *len) \
+{                                                                        \
+    (void) o;                                                            \
+    *len = sz;                                                           \
+    return (struct dwarf_obj) {                                          \
+        .class  = dwarf_class_ref,                                       \
+        .un.ref = *(type *)die,                                          \
+    };                                                                   \
 }
 
-static struct dwarf_obj
-obj_dwarf_class_data2(uint8_t *die, struct obj *o, size_t *len)
-{
-    (void) o;
-    *len = 2;
-    return (struct dwarf_obj) {
-        .class     = dwarf_class_const,
-        .un.const_ = *(uint16_t *)die,
-    };
+#define CLASS_DATA(sz, nm, val)                                           \
+static struct dwarf_obj                                                   \
+PASTE(obj_dwarf_class_data, nm)(uint8_t *die, struct obj *o, size_t *len) \
+{                                                                         \
+    (void) o;                                                             \
+    *len = sz;                                                            \
+    return (struct dwarf_obj) {                                           \
+        .class     = dwarf_class_const,                                   \
+        .un.const_ = val,                                                 \
+    };                                                                    \
 }
 
-static struct dwarf_obj
-obj_dwarf_class_data4(uint8_t *die, struct obj *o, size_t *len)
-{
-    (void) o;
-    *len = 4;
-    return (struct dwarf_obj) {
-        .class     = dwarf_class_const,
-        .un.const_ = *(uint32_t *)die,
-    };
-}
+CLASS_DATA(1,            1,     *(uint8_t *)die)
+CLASS_DATA(2,            2,     *(uint16_t *)die)
+CLASS_DATA(4,            4,     *(uint32_t *)die)
+CLASS_DATA(8,            8,     *(uint64_t *)die)
+CLASS_DATA(leb_len(die), _uleb, uleb_decode(die))
+CLASS_DATA(leb_len(die), _sleb, sleb_decode(die))
 
-static struct dwarf_obj
-obj_dwarf_class_data8(uint8_t *die, struct obj *o, size_t *len)
-{
-    (void) o;
-    *len = 8;
-    return (struct dwarf_obj) {
-        .class     = dwarf_class_const,
-        .un.const_ = *(uint64_t *)die,
-    };
-}
-
-static struct dwarf_obj
-obj_dwarf_class_udata(uint8_t *die, struct obj *o, size_t *len)
-{
-    (void) o;
-    *len = leb_len(die);
-    return (struct dwarf_obj) {
-        .class     = dwarf_class_const,
-        .un.const_ = uleb_decode(die),
-    };
-}
-
-static struct dwarf_obj
-obj_dwarf_class_sdata(uint8_t *die, struct obj *o, size_t *len)
-{
-    (void) o;
-    *len = leb_len(die);
-    return (struct dwarf_obj) {
-        .class     = dwarf_class_const,
-        .un.const_ = sleb_decode(die),
-    };
-}
-
-static struct dwarf_obj
-obj_dwarf_class_ref1(uint8_t *die, struct obj *o, size_t *len)
-{
-    (void) o;
-    *len = 1;
-    return (struct dwarf_obj) {
-        .class  = dwarf_class_ref,
-        .un.ref = *(uint8_t *)die,
-    };
-}
-
-static struct dwarf_obj
-obj_dwarf_class_ref2(uint8_t *die, struct obj *o, size_t *len)
-{
-    (void) o;
-    *len = 2;
-    return (struct dwarf_obj) {
-        .class  = dwarf_class_ref,
-        .un.ref = *(uint16_t *)die,
-    };
-}
-
-static struct dwarf_obj
-obj_dwarf_class_ref4(uint8_t *die, struct obj *o, size_t *len)
-{
-    (void) o;
-    *len = 4;
-    return (struct dwarf_obj) {
-        .class  = dwarf_class_ref,
-        .un.ref = *(uint32_t *)die,
-    };
-}
-
-static struct dwarf_obj
-obj_dwarf_class_ref8(uint8_t *die, struct obj *o, size_t *len)
-{
-    (void) o;
-    *len = 8;
-    return (struct dwarf_obj) {
-        .class  = dwarf_class_ref,
-        .un.ref = *(uint64_t *)die,
-    };
-}
+CLASS_REF(1, uint8_t)
+CLASS_REF(2, uint16_t)
+CLASS_REF(4, uint32_t)
+CLASS_REF(8, uint64_t)
 
 static struct dwarf_obj
 obj_dwarf_class_block1(uint8_t *die, struct obj *o, size_t *len)
@@ -248,9 +174,9 @@ struct dwarf_form {
     DW_FORM(block1,      0x0a, obj_dwarf_class_block1, dwarf_class_block)
     DW_FORM(data1,       0x0b, obj_dwarf_class_data1, dwarf_class_const)
     DW_FORM(flag,        0x0c, obj_dwarf_class_flag, dwarf_class_flag)
-    DW_FORM(sdata,       0x0d, obj_dwarf_class_sdata, dwarf_class_const)
+    DW_FORM(sdata,       0x0d, obj_dwarf_class_data_sleb, dwarf_class_const)
     DW_FORM(strp,        0x0e, obj_dwarf_class_strp, dwarf_class_str)
-    DW_FORM(udata,       0x0f, obj_dwarf_class_udata, dwarf_class_const)
+    DW_FORM(udata,       0x0f, obj_dwarf_class_data_uleb, dwarf_class_const)
     DW_FORM(ref_addr,    0x10, NULL, dwarf_class_ref)
     DW_FORM(ref1,        0x11, obj_dwarf_class_ref1, dwarf_class_ref)
     DW_FORM(ref2,        0x12, obj_dwarf_class_ref2, dwarf_class_ref)

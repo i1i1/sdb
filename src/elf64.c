@@ -66,7 +66,7 @@ elf64_get_symbols(const struct obj *o)
     while (symtab.size > 0) {
         Elf64_Sym *sym = (void *)symtab.buf;
         struct symbol s = {
-            .name = strtab.buf + sym->st_name,
+            .name = (char *)strtab.buf + sym->st_name,
             .addr = sym->st_value,
         };
 

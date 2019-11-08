@@ -23,9 +23,9 @@ leb_len(uint8_t *buf)
 uleb
 uleb_decode(uint8_t *buf)
 {
-    uintmax_t res = 0;
+    uleb res = 0;
     int shift = 0;
-    int maxshift = sizeof(res) * 8 - 7;
+//    int maxshift = sizeof(res) * 8 - 7;
 
     do {
         uint8_t b = (*buf) & 0x7F;
@@ -44,9 +44,9 @@ uleb_decode(uint8_t *buf)
 sleb
 sleb_decode(uint8_t *buf)
 {
-    intmax_t res = 0;
+    sleb res = 0;
     int shift = 0;
-    int maxshift = sizeof(res) * 8 - 7;
+//    int maxshift = sizeof(res) * 8 - 7;
 
     do {
         uint8_t b = (*buf) & 0x7F;
@@ -62,9 +62,11 @@ sleb_decode(uint8_t *buf)
     buf--;
 
     /* sign bit of byte is second high order bit (0x40) */
-    if (*buf & 0x40)
+    if (*buf & 0x40) {
         /* sign extend */
-        res |= (~0 << shift);
+        sleb set = ~0;
+        res |= (set << shift);
+    }
 
     return res;
 }

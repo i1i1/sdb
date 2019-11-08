@@ -17,7 +17,7 @@ debugee: debugee.c
 	@$(CC) $(CFLAGS) -o debugee debugee.c
 
 test: debugee
-	./$(OUT) ./$(OUT)
+	./$(OUT) ./debugee
 
 $(SRC): untabify
 
