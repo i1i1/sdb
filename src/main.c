@@ -18,24 +18,22 @@
 
 struct cmd {
     char *str;
-    void (*cmd)(vector_of(vector_of(char)) *);
+    void (*cmd)(vector_of(vector_of(char)) );
 };
 
 
-void cmd_breakpoint(vector_of(vector_of(char)) *args);
-void cmd_breakpoint_symbol(vector_of(vector_of(char)) *args);
-void cmd_continue(vector_of(vector_of(char)) *args);
-void cmd_delete_breakpoint(vector_of(vector_of(char)) *args);
-void cmd_exit(vector_of(vector_of(char)) *args);
-void cmd_print_args(vector_of(vector_of(char)) *args);
-void cmd_step(vector_of(vector_of(char)) *args);
-void cmd_step_inst(vector_of(vector_of(char)) *args);
+void cmd_breakpoint(vector_of(vector_of(char)) args);
+void cmd_continue(vector_of(vector_of(char)) args);
+void cmd_delete_breakpoint(vector_of(vector_of(char)) args);
+void cmd_exit(vector_of(vector_of(char)) args);
+void cmd_print_args(vector_of(vector_of(char)) args);
+void cmd_step(vector_of(vector_of(char)) args);
+void cmd_step_inst(vector_of(vector_of(char)) args);
 
 
 struct cmd cmds[] = {
 #define CMD(str_, cmd_) { .str = str_, .cmd = cmd_ },
     CMD("b",    cmd_breakpoint)
-    CMD("bs",   cmd_breakpoint_symbol)
     CMD("c",    cmd_continue)
     CMD("d",    cmd_delete_breakpoint)
     CMD("exit", cmd_exit)
@@ -64,59 +62,53 @@ sym_lookup(char *str)
     return 0;
 }
 
-void
-cmd_breakpoint_symbol(vector_of(vector_of(char)) *args)
+int
+set_breakpoint_symbol(char *sym, size_t *addr)
 {
-    if (vector_nmemb(args) != 2) {
-        //printf(" Too many args\n");
-        printf(" Too many args %ld\n", vector_nmemb(args));
-        return;
-    }
-
-    size_t addr = sym_lookup((*args)[1]);
-
-    if (addr == 0) {
-        printf("\tDidn't found symbol `%s'\n", (*args)[1]);
-        return;
-    }
-
-    printf("\tBreakpoint with number %d at %p\n",
-           dbg_add_breakpoint(&dp, addr), addr);
+    *addr = sym_lookup(sym);
+    return (*addr == 0 ? -1 : dbg_add_breakpoint(&dp, *addr));
 }
 
-void
-cmd_breakpoint(vector_of(vector_of(char)) *args)
+int
+set_breakpoint_line(char *line, size_t *addr)
 {
-    vector_decl(char, file);
-    int i, bp_id;
-
-    if (vector_nmemb(args) != 2) {
-        //printf(" Too many args\n");
-        printf(" Too many args %ld\n", vector_nmemb(args));
-        return;
-    }
-
-    for (i = 0; (*args)[1][i] != ':'; i++)
-        vector_push(&file, (*args)[1][i]);
-    vector_push(&file, '\0');
-
     struct line ln = {
-        .file = file,
-        .nu   = atoi((*args)[1] + i + 1),
+        .file = line,
+        .nu   = atoi(index(line, ':') + 1),
     };
-    size_t addr = dwarf_line2addr(o, cus, &ln);
 
-    bp_id = dbg_add_breakpoint(&dp, addr);
-    printf("\tBreakpoint with number %d at %p\n", bp_id, (void *)addr);
-
-    vector_free(&file);
+    *index(line, ':') = '\0';
+    *addr = dwarf_line2addr(o, cus, &ln);
+    return (*addr == 0 ? -1 : dbg_add_breakpoint(&dp, *addr));
 }
 
 void
-cmd_continue(vector_of(vector_of(char)) *args)
+cmd_breakpoint(vector_of(vector_of(char)) args)
 {
-    if (vector_nmemb(args) != 1) {
-        printf(" Too many args %ld\n", vector_nmemb(args));
+    if (vector_nmemb(&args) != 2) {
+        //printf(" Too many args\n");
+        printf(" Too many args %ld\n", vector_nmemb(&args));
+        return;
+    }
+
+    size_t addr;
+    char *arg = strdup(args[1]);
+    int bp_id = (index(args[1], ':') != NULL ?
+                 set_breakpoint_line(args[1], &addr) :
+                 set_breakpoint_symbol(args[1], &addr));
+
+    if (bp_id < 0)
+        printf("\tNo way I can put breakpoint on `%s'\n", arg);
+    else
+        printf("\tBreakpoint with number %d at %p\n", bp_id, (void *)addr);
+    free(arg);
+}
+
+void
+cmd_continue(vector_of(vector_of(char)) args)
+{
+    if (vector_nmemb(&args) != 1) {
+        printf(" Too many args %ld\n", vector_nmemb(&args));
         return;
     }
 
@@ -125,23 +117,23 @@ cmd_continue(vector_of(vector_of(char)) *args)
 }
 
 void
-cmd_delete_breakpoint(vector_of(vector_of(char)) *args)
+cmd_delete_breakpoint(vector_of(vector_of(char)) args)
 {
-    if (vector_nmemb(args) != 2) {
+    if (vector_nmemb(&args) != 2) {
         printf(" Too many args\n");
         return;
     }
 
-    int bp_id = atoi((*args)[1]);
+    int bp_id = atoi(args[1]);
 
     printf("\tRemoving breakpoint %d\n", bp_id);
     dbg_remove_breakpoint(&dp, bp_id);
 }
 
 void
-cmd_exit(vector_of(vector_of(char)) *args)
+cmd_exit(vector_of(vector_of(char)) args)
 {
-    if (vector_nmemb(args) != 2) {
+    if (vector_nmemb(&args) != 2) {
         printf(" Too many args\n");
         return;
     }
@@ -151,9 +143,9 @@ cmd_exit(vector_of(vector_of(char)) *args)
 }
 
 void
-cmd_print_args(vector_of(vector_of(char)) *args)
+cmd_print_args(vector_of(vector_of(char)) args)
 {
-    if (vector_nmemb(args) != 1) {
+    if (vector_nmemb(&args) != 1) {
         printf(" Too many args\n");
         return;
     }
@@ -208,9 +200,9 @@ print_source_line(struct line *ln)
 }
 
 void
-cmd_step(vector_of(vector_of(char)) *args)
+cmd_step(vector_of(vector_of(char)) args)
 {
-    if (vector_nmemb(args) != 1) {
+    if (vector_nmemb(&args) != 1) {
         printf(" Too many args\n");
         return;
     }
@@ -224,15 +216,17 @@ cmd_step(vector_of(vector_of(char)) *args)
         nln = dwarf_addr2line(o, cus, dbg_get_pc(&dp));
     } while (nln.nu == ln.nu && (nln.file == ln.file || STREQ(nln.file, ln.file)));
 
-    if (nln.file) {
+    if (nln.file)
         print_source_line(&ln);
-    }
+    else
+        printf("\t????:XX at %p\n", (void *)dbg_getreg_by_name(&dp, DBG_REG_PC));
+    fflush(stdout);
 }
 
 void
-cmd_step_inst(vector_of(vector_of(char)) *args)
+cmd_step_inst(vector_of(vector_of(char)) args)
 {
-    if (vector_nmemb(args) != 1) {
+    if (vector_nmemb(&args) != 1) {
         printf(" Too many args\n");
         return;
     }
@@ -334,7 +328,7 @@ debug_file(const char *fn)
 
         for (unsigned i = 0; i < ARRAY_SIZE(cmds); i++) {
             if (STREQ(cmds[i].str, args[0])) {
-                cmds[i].cmd(&args);
+                cmds[i].cmd(args);
                 found = true;
                 break;
             }
